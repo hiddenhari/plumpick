@@ -1,0 +1,26 @@
+[project]
+name = "plumpick"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "hiddenhari", email = "119420911+HiddenHari@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "pillow>=12.3.0",
+    "pyside6-essentials>=6.12.0",
+    "send2trash>=2.1.0",
+]
+
+[project.scripts]
+plumpick = "plumpick:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
