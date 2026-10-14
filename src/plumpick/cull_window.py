@@ -50,6 +50,14 @@ class CullWindow(QMainWindow):
         self.library.set_mark(None)
         self._refresh()
 
+    def undo(self) -> None:
+        if self.library.undo():
+            self._load_current()
+
+    def redo(self) -> None:
+        if self.library.redo():
+            self._load_current()
+
     # --- internals ---------------------------------------------------------
 
     def _bind_keys(self) -> None:
@@ -59,6 +67,8 @@ class CullWindow(QMainWindow):
             (("K", "Up"), lambda: self.mark_and_advance(Mark.APPROVE)),
             (("X", "Down", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
             (("U",), self.clear_mark),
+            (("Ctrl+Z",), self.undo),
+            (("Ctrl+Y",), self.redo)
         ]
         for keys, slot in bindings:
             for key in keys:

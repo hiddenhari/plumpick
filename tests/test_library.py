@@ -53,3 +53,77 @@ def test_empty_library_is_safe() -> None:
     assert lib.current_mark is None
     lib.set_mark(Mark.DELETE)  # no-op, must not raise
     assert not lib.next()
+
+
+def test_goto() -> None:
+    IMAGE_COUNT = 10
+    lib = make_library(IMAGE_COUNT)
+
+    assert lib.goto(IMAGE_COUNT) is False
+    assert lib.current == Path("img0.png")
+    lib.goto(IMAGE_COUNT - 1)
+    assert lib.current == Path(f"img{IMAGE_COUNT - 1}.png")
+    assert lib.goto(-1) is False
+    assert lib.current == Path(f"img{IMAGE_COUNT - 1}.png")
+    lib.goto(0)
+    assert lib.current == Path("img0.png")
+
+
+def test_undo() -> None:
+    lib = make_library()
+    assert lib.undo() is False
+    assert lib.redo() is False
+
+    # undo doesn't record navigation actions
+    # redos come from undos, so can't record navigations if undo didn't
+    lib.next()  # on img 1
+    assert lib.undo() is False
+    assert lib.current == Path("img1.png")
+
+    # basic undo redo
+    lib.set_mark(Mark.APPROVE)
+    assert lib.undo() is True
+    assert lib.current_mark is None
+    assert lib.redo() is True
+    assert lib.current_mark is Mark.APPROVE
+
+    # undo/redo when on a different image jumps to the undoing image
+    edited_image = lib.current # on img 1
+    lib.next() # on img 2
+    assert lib.undo() is True
+    assert lib.current is edited_image # on img 1
+    assert lib.current_mark is None
+    lib.prev() # on img 0
+    assert lib.redo() is True
+    assert lib.current is edited_image # on img 1
+    assert lib.current_mark is Mark.APPROVE
+
+    # redo is cleared when editing after undo
+    assert lib.undo() is True
+    lib.set_mark(Mark.DELETE)
+    assert lib.redo() is False
+    assert lib.current_mark is Mark.DELETE
+
+
+def test_undo_sequence():
+    lib = make_library()
+
+    # only effective edit has an undo
+    lib.set_mark(None)
+    assert lib.undo() is False
+
+    # undo, redo sequence
+    lib.set_mark(None)
+    lib.set_mark(Mark.APPROVE)
+    lib.set_mark(Mark.DELETE)
+    lib.set_mark(None)
+    assert lib.current_mark is None  # keep in case set_mark changed
+    assert lib.undo() is True and lib.current_mark is Mark.DELETE
+    assert lib.undo() is True and lib.current_mark is Mark.APPROVE
+    assert lib.undo() is True and lib.current_mark is None
+    assert lib.undo() is False
+    assert lib.redo() is True and lib.current_mark is Mark.APPROVE
+    assert lib.redo() is True and lib.current_mark is Mark.DELETE
+    assert lib.redo() is True and lib.current_mark is None
+    assert lib.redo() is False
+    
