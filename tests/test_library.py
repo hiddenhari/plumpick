@@ -38,13 +38,14 @@ def test_marks_follow_the_image_not_the_cursor() -> None:
 
 
 def test_clearing_and_overwriting_marks() -> None:
-    lib = make_library(1)
+    lib = make_library()
+    lib.next()
     lib.set_mark(Mark.APPROVE)
     lib.set_mark(Mark.DELETE)
     assert lib.current_mark is Mark.DELETE
     lib.set_mark(None)
     assert lib.current_mark is None
-    assert lib.undecided == 1
+    assert lib.undecided == 3
 
 
 def test_empty_library_is_safe() -> None:
@@ -69,55 +70,98 @@ def test_goto() -> None:
     assert lib.current == Path("img0.png")
 
 
-def test_undo() -> None:
+def test_undo_basics() -> None:
     lib = make_library()
     assert lib.undo() is False
     assert lib.redo() is False
 
-    # undo doesn't record navigation actions
-    # redos come from undos, so can't record navigations if undo didn't
-    lib.next()  # on img 1
-    assert lib.undo() is False
-    assert lib.current == Path("img1.png")
-
-    # basic undo redo
     lib.set_mark(Mark.APPROVE)
     assert lib.undo() is True
     assert lib.current_mark is None
     assert lib.redo() is True
-    assert lib.current_mark is Mark.APPROVE
+    assert lib.current_mark == Mark.APPROVE
 
+
+def test_undo_dont_record_navigation() -> None:
+    # redos come from undos, so can't record navigations if undo didn't
+    lib = make_library()
+    lib.next()
+    assert lib.undo() is False
+    assert lib.current == Path("img1.png")
+
+
+def test_undo_jump_to_image() -> None:
     # undo/redo when on a different image jumps to the undoing image
-    edited_image = lib.current # on img 1
-    lib.next() # on img 2
-    assert lib.undo() is True
-    assert lib.current is edited_image # on img 1
+    lib = make_library()
+    lib.set_mark(Mark.APPROVE)
+    edited_image = lib.current
+    lib.next()
+    lib.next()  # on img 2
+    assert lib.undo() is True  # on img 0
+    assert lib.current == edited_image
     assert lib.current_mark is None
-    lib.prev() # on img 0
-    assert lib.redo() is True
-    assert lib.current is edited_image # on img 1
+    assert lib.index == 0
+    lib.next()  # on img 1
+    assert lib.redo() is True  # on img 0
+    assert lib.current == edited_image
     assert lib.current_mark is Mark.APPROVE
+    assert lib.index == 0
 
-    # redo is cleared when editing after undo
+
+def test_undo_image_no_index() -> None:
+    lib = make_library()
+    lib.set_mark(Mark.DELETE)
+    lib.next()
+    lib.paths.remove(Path("img0.png"))
+    index, current = lib.index, lib.current
+
+    assert lib.undo() is True
+    assert lib.index == index  # viewer/cursor didn't move
+    assert lib.current == current
+    assert Path("img0.png") not in lib.marks
+
+    assert lib.redo() is True
+    assert lib.index == index
+    assert lib.current == current
+    assert Path("img0.png") in lib.marks
+
+
+def test_clear_then_undo() -> None:
+    lib = make_library(1)
+    lib.set_mark(Mark.APPROVE)
+    assert lib.current_mark is Mark.APPROVE and lib.undecided == 0
+    lib.undo()
+    assert lib.current_mark is None and lib.undecided == 1
+
+
+def test_redo_is_cleared_after_editing() -> None:
+    # redo is cleared when editing
+    lib = make_library()
+    lib.set_mark(Mark.APPROVE)
     assert lib.undo() is True
     lib.set_mark(Mark.DELETE)
     assert lib.redo() is False
-    assert lib.current_mark is Mark.DELETE
+    assert lib.current_mark == Mark.DELETE
+
+
+def test_undo_only_after_real_edit() -> None:
+    lib = make_library()
+    lib.set_mark(None)
+    assert lib.undo() is False
+
+    lib.next()
+    lib.set_mark(Mark.APPROVE)
+    lib.set_mark(Mark.APPROVE)  # only one effective edit
+    assert lib.undo() is True
+    assert lib.undo() is False
 
 
 def test_undo_sequence():
     lib = make_library()
-
-    # only effective edit has an undo
-    lib.set_mark(None)
-    assert lib.undo() is False
-
-    # undo, redo sequence
     lib.set_mark(None)
     lib.set_mark(Mark.APPROVE)
     lib.set_mark(Mark.DELETE)
     lib.set_mark(None)
-    assert lib.current_mark is None  # keep in case set_mark changed
     assert lib.undo() is True and lib.current_mark is Mark.DELETE
     assert lib.undo() is True and lib.current_mark is Mark.APPROVE
     assert lib.undo() is True and lib.current_mark is None
@@ -126,4 +170,21 @@ def test_undo_sequence():
     assert lib.redo() is True and lib.current_mark is Mark.DELETE
     assert lib.redo() is True and lib.current_mark is None
     assert lib.redo() is False
-    
+
+
+def test_undo_undecided_count():
+    lib = make_library()
+    lib.set_mark(Mark.APPROVE)
+    lib.next()
+    lib.set_mark(Mark.APPROVE)
+    lib.next()
+    lib.set_mark(Mark.DELETE)
+    assert lib.undecided == 0
+    assert lib.undo() is True and lib.undecided == 1
+    assert lib.undo() is True and lib.undecided == 2
+    assert lib.undo() is True and lib.undecided == 3
+    assert lib.undo() is False and lib.undecided == 3
+    assert lib.redo() is True and lib.undecided == 2
+    assert lib.redo() is True and lib.undecided == 1
+    assert lib.redo() is True and lib.undecided == 0
+    assert lib.redo() is False and lib.undecided == 0

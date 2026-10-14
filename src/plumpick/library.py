@@ -6,7 +6,7 @@ and the UI stays a thin layer on top of it.
 
 from __future__ import annotations
 
-from collections import deque
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -16,6 +16,14 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 class Mark(Enum):
     APPROVE = "approve"
     DELETE = "delete"
+
+
+@dataclass
+class Change:
+    """history record for undos and redos"""
+
+    path: Path
+    mark: Mark | None
 
 
 def scan_folder(folder: Path) -> list[Path]:
@@ -32,11 +40,11 @@ def scan_folder(folder: Path) -> list[Path]:
 
 class Library:
     def __init__(self, paths: list[Path]) -> None:
-        self.paths = paths  # path of images
-        self.index = 0  # index of current image on main window
-        self.marks: dict[Path, Mark] = {}  # records of decision on each image
-        self.undos = deque()
-        self.redos = deque()
+        self.paths = paths  # paths of all scanned images
+        self.index = 0  # internal index of image
+        self.marks: dict[Path, Mark] = {}  # undecided image paths are not stored
+        self.undos: list[Change] = []  # TODO: history is uncapped for now
+        self.redos: list[Change] = []
 
     @classmethod
     def from_folder(cls, folder: Path) -> Library:
@@ -67,55 +75,50 @@ class Library:
         self.index -= 1
         return True
 
-    def goto(self, index) -> bool:
+    def goto(self, index: int) -> bool:
         if index < 0 or index >= len(self.paths):
             return False
         self.index = index
         return True
 
+    def _write_mark(self, path: Path, mark: Mark | None) -> None:
+        if mark is None:
+            self.marks.pop(path, None)
+        else:
+            self.marks[path] = mark
+
     def set_mark(self, mark: Mark | None) -> None:
         """Mark the current image; `None` clears the mark."""
-        if self.current is None:
+        if self.current is None or mark is self.current_mark:
             return
-
-        if mark is not self.marks.get(self.current):
-            # only set if different
-            self.redos.clear()
-            self.push_undos()
-            if mark is None:
-                self.marks.pop(self.current, None)
-            else:
-                self.marks[self.current] = mark
+        self.undos.append(Change(self.current, self.current_mark))
+        self.redos.clear()
+        self._write_mark(self.current, mark)
 
     def count(self, mark: Mark) -> int:
         return sum(1 for m in self.marks.values() if m is mark)
 
-    def push_undos(self):
-        self.undos.append((self.index, self.marks.get(self.current)))
+    def _swap_write(self, from_stack: list[Change], to_stack: list[Change]) -> bool:
+        """helper for undo and redo, same logic but reverse"""
+        if not from_stack:
+            return False
+
+        # each undo/redo swap the history record to other's stack
+        change = from_stack.pop()
+        to_stack.append(Change(change.path, self.marks.get(change.path)))
+        self._write_mark(change.path, change.mark)
+
+        try:
+            self.index = self.paths.index(change.path)
+        except ValueError:
+            pass  # not in the current list e.g. filtered out
+        return True
 
     def undo(self) -> bool:
-        try:
-            index, mark = self.undos.pop()
-        except IndexError:
-            return False
-
-        if index is not self.index and self.goto(index) is not True:
-            print("Library - undo - goto failed")
-        self.redos.append((self.index, self.marks.get(self.current)))
-        self.marks[self.current] = mark
-        return True
+        return self._swap_write(self.undos, self.redos)
 
     def redo(self) -> bool:
-        try:
-            index, mark = self.redos.pop()
-        except IndexError:
-            return False
-
-        if index is not self.index and self.goto(index) is not True:
-            print("Library - undo - goto failed")
-        self.undos.append((self.index, self.marks.get(self.current)))
-        self.marks[self.current] = mark
-        return True
+        return self._swap_write(self.redos, self.undos)
 
     @property
     def undecided(self) -> int:
