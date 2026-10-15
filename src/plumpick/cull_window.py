@@ -62,13 +62,13 @@ class CullWindow(QMainWindow):
 
     def _bind_keys(self) -> None:
         bindings = [
-            (("Right", "Space"), self.next_image),
-            (("Left",), self.prev_image),
-            (("K", "Up"), lambda: self.mark_and_advance(Mark.APPROVE)),
-            (("X", "Down", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
-            (("U",), self.clear_mark),
-            (("Ctrl+Z",), self.undo),
-            (("Ctrl+Y",), self.redo)
+            (("Right", "Space", "D"), self.next_image),
+            (("Left", "A"), self.prev_image),
+            (("K", "Up", "W"), lambda: self.mark_and_advance(Mark.APPROVE)),
+            (("X", "Down", "D", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
+            (("R", "End", "/"), self.clear_mark),
+            ((QKeySequence.StandardKey.Undo,), self.undo),
+            ((QKeySequence.StandardKey.Redo,), self.redo),
         ]
         for keys, slot in bindings:
             for key in keys:
