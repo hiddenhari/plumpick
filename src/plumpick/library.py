@@ -6,11 +6,14 @@ and the UI stays a thin layer on top of it.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+SAVE_FILE = ".plumpick.json"
 
 
 class Mark(Enum):
@@ -39,7 +42,8 @@ def scan_folder(folder: Path) -> list[Path]:
 
 
 class Library:
-    def __init__(self, paths: list[Path]) -> None:
+    def __init__(self, root: Path, paths: list[Path]) -> None:
+        self.root = root
         self.paths = paths  # paths of all scanned images
         self.index = 0  # internal index of image
         self.marks: dict[Path, Mark] = {}  # undecided image paths are not stored
@@ -48,7 +52,9 @@ class Library:
 
     @classmethod
     def from_folder(cls, folder: Path) -> Library:
-        return cls(scan_folder(folder))
+        library = cls(folder, scan_folder(folder))
+        library.load_session()
+        return library
 
     def __len__(self) -> int:
         return len(self.paths)
@@ -60,6 +66,50 @@ class Library:
     @property
     def current_mark(self) -> Mark | None:
         return self.marks.get(self.current) if self.current else None
+
+    @property
+    def session_file(self) -> Path:
+        return self.root / SAVE_FILE
+
+    def save_session(self) -> None:
+        data = {
+            "version": 1,
+            "index" : self.index,
+            "marks": {
+                str(path): mark.value for path, mark in self.marks.items()
+            }
+        }
+        temp_path = self.session_file.with_suffix(".tmp")
+        try:
+            temp_path.write_text(json.dumps(data, indent=4), encoding="utf-8")
+            os.replace(temp_path, self.session_file)
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def load_session(self) -> None:
+        try:
+            with self.session_file.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return
+        except json.JSONDecodeError:
+            return
+        except KeyError:
+            return 
+        except ValueError:
+            return
+        except OSError:
+            return
+
+        self.paths = scan_folder(self.root)
+        self.index = int(data["index"])
+        existing = set(self.paths)
+        self.marks = {
+            Path(path): Mark(mark)
+            for path, mark in data["marks"].items()
+            if Path(path) in existing  # missing files are dropped
+        }
+
 
     def next(self) -> bool:
         """Move to the next image. Returns False if already at the end."""
@@ -94,6 +144,7 @@ class Library:
         self.undos.append(Change(self.current, self.current_mark))
         self.redos.clear()
         self._write_mark(self.current, mark)
+        self.save_session()  # TODO: measure performance, maybe debounce
 
     def count(self, mark: Mark) -> int:
         return sum(1 for m in self.marks.values() if m is mark)

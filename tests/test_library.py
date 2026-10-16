@@ -1,10 +1,21 @@
+import os
 from pathlib import Path
+
+import pytest
 
 from plumpick.library import Library, Mark, scan_folder
 
 
-def make_library(n: int = 3) -> Library:
-    return Library([Path(f"img{i}.png") for i in range(n)])
+def make_library(tmp_path: Path, n: int = 3) -> Library:
+    """Path.cwd() might differ from actual pytest directory
+    use make_library_with_files if path matters"""
+    return Library(tmp_path, [Path(f"img{i}.png") for i in range(n)])
+
+
+def make_library_with_files(root: Path, n: int = 3) -> Library:
+    for i in range(n):
+        (root / f"img{i}.png").touch()  # make_library(tmp_path) makes no real file
+    return Library.from_folder(root)
 
 
 def test_scan_folder_keeps_only_images_sorted(tmp_path: Path) -> None:
@@ -15,8 +26,8 @@ def test_scan_folder_keeps_only_images_sorted(tmp_path: Path) -> None:
     assert [p.name for p in scan_folder(tmp_path)] == ["a.jpg", "b.PNG", "c.webp"]
 
 
-def test_navigation_stops_at_both_ends() -> None:
-    lib = make_library(2)
+def test_navigation_stops_at_both_ends(tmp_path: Path) -> None:
+    lib = make_library(tmp_path, 2)
     assert not lib.prev()
     assert lib.next()
     assert lib.current == Path("img1.png")
@@ -24,8 +35,8 @@ def test_navigation_stops_at_both_ends() -> None:
     assert lib.index == 1
 
 
-def test_marks_follow_the_image_not_the_cursor() -> None:
-    lib = make_library(3)
+def test_marks_follow_the_image_not_the_cursor(tmp_path: Path) -> None:
+    lib = make_library(tmp_path, 3)
     lib.set_mark(Mark.APPROVE)
     lib.next()
     lib.set_mark(Mark.DELETE)
@@ -37,8 +48,8 @@ def test_marks_follow_the_image_not_the_cursor() -> None:
     assert lib.undecided == 1
 
 
-def test_clearing_and_overwriting_marks() -> None:
-    lib = make_library()
+def test_clearing_and_overwriting_marks(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     lib.next()
     lib.set_mark(Mark.APPROVE)
     lib.set_mark(Mark.DELETE)
@@ -48,17 +59,17 @@ def test_clearing_and_overwriting_marks() -> None:
     assert lib.undecided == 3
 
 
-def test_empty_library_is_safe() -> None:
-    lib = make_library(0)
+def test_empty_library_is_safe(tmp_path: Path) -> None:
+    lib = make_library(tmp_path, 0)
     assert lib.current is None
     assert lib.current_mark is None
     lib.set_mark(Mark.DELETE)  # no-op, must not raise
     assert not lib.next()
 
 
-def test_goto() -> None:
+def test_goto(tmp_path: Path) -> None:
     IMAGE_COUNT = 10
-    lib = make_library(IMAGE_COUNT)
+    lib = make_library(tmp_path, IMAGE_COUNT)
 
     assert lib.goto(IMAGE_COUNT) is False
     assert lib.current == Path("img0.png")
@@ -70,8 +81,8 @@ def test_goto() -> None:
     assert lib.current == Path("img0.png")
 
 
-def test_undo_basics() -> None:
-    lib = make_library()
+def test_undo_basics(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     assert lib.undo() is False
     assert lib.redo() is False
 
@@ -82,17 +93,17 @@ def test_undo_basics() -> None:
     assert lib.current_mark == Mark.APPROVE
 
 
-def test_undo_dont_record_navigation() -> None:
+def test_undo_dont_record_navigation(tmp_path: Path) -> None:
     # redos come from undos, so can't record navigations if undo didn't
-    lib = make_library()
+    lib = make_library(tmp_path)
     lib.next()
     assert lib.undo() is False
     assert lib.current == Path("img1.png")
 
 
-def test_undo_jump_to_image() -> None:
+def test_undo_jump_to_image(tmp_path: Path) -> None:
     # undo/redo when on a different image jumps to the undoing image
-    lib = make_library()
+    lib = make_library(tmp_path)
     lib.set_mark(Mark.APPROVE)
     edited_image = lib.current
     lib.next()
@@ -108,8 +119,8 @@ def test_undo_jump_to_image() -> None:
     assert lib.index == 0
 
 
-def test_undo_image_no_index() -> None:
-    lib = make_library()
+def test_undo_image_no_index(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     lib.set_mark(Mark.DELETE)
     lib.next()
     lib.paths.remove(Path("img0.png"))
@@ -126,17 +137,17 @@ def test_undo_image_no_index() -> None:
     assert Path("img0.png") in lib.marks
 
 
-def test_clear_then_undo() -> None:
-    lib = make_library(1)
+def test_clear_then_undo(tmp_path: Path) -> None:
+    lib = make_library(tmp_path, 1)
     lib.set_mark(Mark.APPROVE)
     assert lib.current_mark is Mark.APPROVE and lib.undecided == 0
     lib.undo()
     assert lib.current_mark is None and lib.undecided == 1
 
 
-def test_redo_is_cleared_after_editing() -> None:
+def test_redo_is_cleared_after_editing(tmp_path: Path) -> None:
     # redo is cleared when editing
-    lib = make_library()
+    lib = make_library(tmp_path)
     lib.set_mark(Mark.APPROVE)
     assert lib.undo() is True
     lib.set_mark(Mark.DELETE)
@@ -144,8 +155,8 @@ def test_redo_is_cleared_after_editing() -> None:
     assert lib.current_mark == Mark.DELETE
 
 
-def test_undo_only_after_real_edit() -> None:
-    lib = make_library()
+def test_undo_only_after_real_edit(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     lib.set_mark(None)
     assert lib.undo() is False
 
@@ -156,8 +167,8 @@ def test_undo_only_after_real_edit() -> None:
     assert lib.undo() is False
 
 
-def test_undo_sequence():
-    lib = make_library()
+def test_undo_sequence(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     lib.set_mark(None)
     lib.set_mark(Mark.APPROVE)
     lib.set_mark(Mark.DELETE)
@@ -172,8 +183,8 @@ def test_undo_sequence():
     assert lib.redo() is False
 
 
-def test_undo_undecided_count():
-    lib = make_library()
+def test_undo_undecided_count(tmp_path: Path) -> None:
+    lib = make_library(tmp_path)
     lib.set_mark(Mark.APPROVE)
     lib.next()
     lib.set_mark(Mark.APPROVE)
@@ -188,3 +199,63 @@ def test_undo_undecided_count():
     assert lib.redo() is True and lib.undecided == 1
     assert lib.redo() is True and lib.undecided == 0
     assert lib.redo() is False and lib.undecided == 0
+
+
+def test_save_load_library(tmp_path: Path):
+    """test reloading library recovers index (last viewing image), marks"""
+    test_count = 10
+    lib = make_library_with_files(tmp_path, test_count)
+    for i in range(test_count):
+        lib.marks[tmp_path / f"img{i}.png"] = Mark.APPROVE
+
+    session_index = test_count % 3  # test whatever index
+    lib.index = session_index
+    lib.save_session()
+    lib = Library.from_folder(tmp_path)  # restores the saved session
+    assert lib.index == session_index
+    assert len(lib.paths) == test_count
+    assert len(lib.marks) == test_count
+    for i in range(test_count):
+        assert lib.marks[tmp_path / f"img{i}.png"] == Mark.APPROVE
+
+
+def test_load_missing_files(tmp_path: Path):
+    """test missing files are dropped when reloading"""
+    test_count = 10
+    lib = make_library_with_files(tmp_path, test_count)
+    for i in range(test_count):
+        lib.marks[tmp_path / f"img{i}.png"] = Mark.DELETE
+    assert len(lib.marks) == test_count
+
+    lib.save_session()
+    lib = make_library_with_files(tmp_path, test_count)
+    delete_count = 0
+    for i in range(0, test_count, 2):
+        (tmp_path / f"img{i}.png").unlink()
+        delete_count += 1
+    lib.load_session()
+    assert len(lib.paths) == test_count - delete_count
+    assert len(lib.marks) == test_count - delete_count
+
+
+def test_failed_save_keeps_old_session(tmp_path, monkeypatch):
+    lib = make_library_with_files(tmp_path, 2)
+    lib.set_mark(Mark.APPROVE)
+    save = tmp_path / ".plumpick.json"
+
+    lib.next()
+    lib.set_mark(Mark.DELETE)  # set_mark autosaves
+    before = save.read_text()
+    lib.marks.clear()  # unsaved change
+
+    def boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        lib.save_session()
+
+    assert save.read_text() == before
+    assert not list(tmp_path.glob("*.tmp"))  # temp file cleaned up
+    assert not list(tmp_path.parent.glob("*.tmp"))  # and nothing leaked outside
+
