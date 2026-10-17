@@ -289,3 +289,52 @@ def test_failed_save_keeps_old_session(
     assert not list(tmp_path.glob("*.tmp"))  # temp file cleaned up
     assert not list(tmp_path.parent.glob("*.tmp"))  # and nothing leaked outside
 
+
+
+def test_apply_commit_drops_committed_files(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 4)
+    lib.marks = {
+        tmp_path / "img0.png": Mark.DELETE,
+        tmp_path / "img1.png": Mark.APPROVE,
+        tmp_path / "img3.png": Mark.DELETE,
+    }
+    lib.apply_commit([tmp_path / "img0.png"])  # img3 failed, so it stays
+
+    assert lib.paths == [tmp_path / f"img{i}.png" for i in (1, 2, 3)]
+    assert lib.marks == {
+        tmp_path / "img1.png": Mark.APPROVE,
+        tmp_path / "img3.png": Mark.DELETE,
+    }
+    assert Library.from_folder(tmp_path).marks == lib.marks
+
+
+def test_apply_commit_clears_history(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 3)
+    lib.set_mark(Mark.DELETE)
+    lib.undo()
+    lib.redo()
+    lib.apply_commit([tmp_path / "img0.png"])
+    assert lib.undo() is False and lib.redo() is False
+
+
+def test_apply_commit_goes_to_first_undecided(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 4)
+    lib.marks = {tmp_path / f"img{i}.png": Mark.APPROVE for i in (0, 1, 3)}
+    lib.index = 3
+    lib.apply_commit([])
+    assert lib.current == tmp_path / "img2.png"
+
+
+def test_apply_commit_with_nothing_undecided_goes_to_start(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 3)
+    lib.marks = {p: Mark.APPROVE for p in lib.paths}
+    lib.index = 2
+    lib.apply_commit([tmp_path / "img0.png"])
+    assert lib.index == 0
+
+
+def test_apply_commit_removing_everything(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 2)
+    lib.marks = {p: Mark.DELETE for p in lib.paths}
+    lib.apply_commit(list(lib.paths))
+    assert lib.current is None and lib.index == 0 and lib.marks == {}

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImageReader, QKeySequence, QPixmap, QResizeEvent, QShortcut
-from PySide6.QtWidgets import QLabel, QMainWindow, QSizePolicy
+from PySide6.QtWidgets import QLabel, QMainWindow, QMessageBox, QPushButton, QSizePolicy
 
+from plumpick.commit import run_commit
+from plumpick.commit_dialog import CommitDialog
 from plumpick.library import Library, Mark
 
 BORDER_WIDTH = 6
@@ -23,6 +25,10 @@ class CullWindow(QMainWindow):
         # grows to fit every large image and resizing would feed back on itself.
         self.image_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.setCentralWidget(self.image_label)
+
+        commit_button = QPushButton("Commit…", clicked=self.commit)
+        commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
+        self.statusBar().addPermanentWidget(commit_button)
 
         self.setStyleSheet("QMainWindow { background: #1e1e1e; } QLabel { color: #ccc; }")
         self.resize(1200, 800)
@@ -58,6 +64,24 @@ class CullWindow(QMainWindow):
         if self.library.redo():
             self._load_current()
 
+    def commit(self) -> None:
+        dialog = CommitDialog(self.library, self)
+        if not dialog.exec():
+            return
+        result = run_commit(dialog.plan(), dialog.destination)
+        self.library.apply_commit(result.done)
+        self._load_current()
+        if result.failed:
+            lines = [f"{path.name}: {error}" for path, error in result.failed[:10]]
+            if len(result.failed) > 10:
+                lines.append(f"…and {len(result.failed) - 10} more")
+            QMessageBox.warning(
+                self,
+                "Commit",
+                f"{len(result.failed)} files could not be moved and are still marked:\n\n"
+                + "\n".join(lines),
+            )
+
     # --- internals ---------------------------------------------------------
 
     def _bind_keys(self) -> None:
@@ -69,6 +93,7 @@ class CullWindow(QMainWindow):
             (("R", "End", "/"), self.clear_mark),
             ((QKeySequence.StandardKey.Undo,), self.undo),
             ((QKeySequence.StandardKey.Redo,), self.redo),
+            (("Ctrl+Return", "Ctrl+Enter"), self.commit),
         ]
         for keys, slot in bindings:
             for key in keys:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -170,6 +171,18 @@ class Library:
             return False
         self.save_session()
         return True
+
+    def apply_commit(self, removed: Iterable[Path]) -> None:
+        """Forget files that a commit moved away, then go to the first undecided."""
+        gone = set(removed)
+        self.paths = [p for p in self.paths if p not in gone]
+        self.marks = {p: m for p, m in self.marks.items() if p not in gone}
+        self.undos.clear()  # moved files can't be un-marked back into place
+        self.redos.clear()
+        self.index = next(
+            (i for i, p in enumerate(self.paths) if p not in self.marks), 0
+        )
+        self.save_session()
 
     @property
     def undecided(self) -> int:
