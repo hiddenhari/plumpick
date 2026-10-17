@@ -74,10 +74,12 @@ class Library:
     def save_session(self) -> None:
         data = {
             "version": 1,
-            "index" : self.index,
+            "index": self.index,
             "marks": {
-                str(path): mark.value for path, mark in self.marks.items()
-            }
+                # relative, so the session survives moving the folder
+                path.relative_to(self.root).as_posix(): mark.value
+                for path, mark in self.marks.items()
+            },
         }
         temp_path = self.session_file.with_suffix(".tmp")
         try:
@@ -87,29 +89,21 @@ class Library:
             temp_path.unlink(missing_ok=True)
 
     def load_session(self) -> None:
+        """Restore index and marks for the already-scanned `self.paths`."""
+        known = set(self.paths)
         try:
-            with self.session_file.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        except FileNotFoundError:
-            return
-        except json.JSONDecodeError:
-            return
-        except KeyError:
-            return 
-        except ValueError:
-            return
-        except OSError:
-            return
+            data = json.loads(self.session_file.read_text(encoding="utf-8"))
+            index = int(data["index"])
+            marks = {}
+            for rel, mark in data["marks"].items():
+                path = self.root / rel
+                if path in known:  # missing files are dropped
+                    marks[path] = Mark(mark)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return  # missing or corrupt session: start fresh
 
-        self.paths = scan_folder(self.root)
-        self.index = int(data["index"])
-        existing = set(self.paths)
-        self.marks = {
-            Path(path): Mark(mark)
-            for path, mark in data["marks"].items()
-            if Path(path) in existing  # missing files are dropped
-        }
-
+        self.marks = marks
+        self.index = min(max(index, 0), len(self.paths) - 1) if self.paths else 0
 
     def next(self) -> bool:
         """Move to the next image. Returns False if already at the end."""
@@ -166,10 +160,16 @@ class Library:
         return True
 
     def undo(self) -> bool:
-        return self._swap_write(self.undos, self.redos)
+        if not self._swap_write(self.undos, self.redos):
+            return False
+        self.save_session()
+        return True
 
     def redo(self) -> bool:
-        return self._swap_write(self.redos, self.undos)
+        if not self._swap_write(self.redos, self.undos):
+            return False
+        self.save_session()
+        return True
 
     @property
     def undecided(self) -> int:

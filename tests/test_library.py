@@ -9,7 +9,7 @@ from plumpick.library import Library, Mark, scan_folder
 def make_library(tmp_path: Path, n: int = 3) -> Library:
     """Path.cwd() might differ from actual pytest directory
     use make_library_with_files if path matters"""
-    return Library(tmp_path, [Path(f"img{i}.png") for i in range(n)])
+    return Library(tmp_path, [tmp_path / f"img{i}.png" for i in range(n)])
 
 
 def make_library_with_files(root: Path, n: int = 3) -> Library:
@@ -30,7 +30,7 @@ def test_navigation_stops_at_both_ends(tmp_path: Path) -> None:
     lib = make_library(tmp_path, 2)
     assert not lib.prev()
     assert lib.next()
-    assert lib.current == Path("img1.png")
+    assert lib.current == tmp_path / "img1.png"
     assert not lib.next()
     assert lib.index == 1
 
@@ -72,13 +72,13 @@ def test_goto(tmp_path: Path) -> None:
     lib = make_library(tmp_path, IMAGE_COUNT)
 
     assert lib.goto(IMAGE_COUNT) is False
-    assert lib.current == Path("img0.png")
+    assert lib.current == tmp_path / "img0.png"
     lib.goto(IMAGE_COUNT - 1)
-    assert lib.current == Path(f"img{IMAGE_COUNT - 1}.png")
+    assert lib.current == tmp_path / f"img{IMAGE_COUNT - 1}.png"
     assert lib.goto(-1) is False
-    assert lib.current == Path(f"img{IMAGE_COUNT - 1}.png")
+    assert lib.current == tmp_path / f"img{IMAGE_COUNT - 1}.png"
     lib.goto(0)
-    assert lib.current == Path("img0.png")
+    assert lib.current == tmp_path / "img0.png"
 
 
 def test_undo_basics(tmp_path: Path) -> None:
@@ -98,7 +98,7 @@ def test_undo_dont_record_navigation(tmp_path: Path) -> None:
     lib = make_library(tmp_path)
     lib.next()
     assert lib.undo() is False
-    assert lib.current == Path("img1.png")
+    assert lib.current == tmp_path / "img1.png"
 
 
 def test_undo_jump_to_image(tmp_path: Path) -> None:
@@ -123,18 +123,18 @@ def test_undo_image_no_index(tmp_path: Path) -> None:
     lib = make_library(tmp_path)
     lib.set_mark(Mark.DELETE)
     lib.next()
-    lib.paths.remove(Path("img0.png"))
+    lib.paths.remove(tmp_path / "img0.png")
     index, current = lib.index, lib.current
 
     assert lib.undo() is True
     assert lib.index == index  # viewer/cursor didn't move
     assert lib.current == current
-    assert Path("img0.png") not in lib.marks
+    assert tmp_path / "img0.png" not in lib.marks
 
     assert lib.redo() is True
     assert lib.index == index
     assert lib.current == current
-    assert Path("img0.png") in lib.marks
+    assert tmp_path / "img0.png" in lib.marks
 
 
 def test_clear_then_undo(tmp_path: Path) -> None:
@@ -208,11 +208,10 @@ def test_save_load_library(tmp_path: Path):
     for i in range(test_count):
         lib.marks[tmp_path / f"img{i}.png"] = Mark.APPROVE
 
-    session_index = test_count % 3  # test whatever index
-    lib.index = session_index
+    lib.index = 4
     lib.save_session()
     lib = Library.from_folder(tmp_path)  # restores the saved session
-    assert lib.index == session_index
+    assert lib.index == 4
     assert len(lib.paths) == test_count
     assert len(lib.marks) == test_count
     for i in range(test_count):
@@ -227,18 +226,49 @@ def test_load_missing_files(tmp_path: Path):
         lib.marks[tmp_path / f"img{i}.png"] = Mark.DELETE
     assert len(lib.marks) == test_count
 
+    lib.index = test_count - 1
     lib.save_session()
-    lib = make_library_with_files(tmp_path, test_count)
-    delete_count = 0
-    for i in range(0, test_count, 2):
+
+    deleted = range(0, test_count, 2)
+    for i in deleted:
         (tmp_path / f"img{i}.png").unlink()
-        delete_count += 1
-    lib.load_session()
-    assert len(lib.paths) == test_count - delete_count
-    assert len(lib.marks) == test_count - delete_count
+    remaining = test_count - len(deleted)
+
+    lib = Library.from_folder(tmp_path)
+    assert len(lib.paths) == remaining
+    assert len(lib.marks) == remaining
+    assert lib.index == remaining - 1  # clamped, not past the end
 
 
-def test_failed_save_keeps_old_session(tmp_path, monkeypatch):
+def test_session_survives_moving_folder(tmp_path: Path) -> None:
+    old, new = tmp_path / "old", tmp_path / "new"
+    old.mkdir()
+    lib = make_library_with_files(old, 3)
+    lib.next()
+    lib.set_mark(Mark.DELETE)
+    old.rename(new)
+
+    moved = Library.from_folder(new)
+    assert moved.marks == {new / "img1.png": Mark.DELETE}
+    assert moved.index == 1
+
+
+def test_undo_is_saved(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 2)
+    lib.set_mark(Mark.APPROVE)
+    lib.undo()
+    assert Library.from_folder(tmp_path).marks == {}
+
+
+def test_corrupt_session_is_ignored(tmp_path: Path) -> None:
+    (tmp_path / ".plumpick.json").write_text('{"index": "x"}', encoding="utf-8")
+    lib = make_library_with_files(tmp_path, 2)
+    assert lib.index == 0 and lib.marks == {}
+
+
+def test_failed_save_keeps_old_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     lib = make_library_with_files(tmp_path, 2)
     lib.set_mark(Mark.APPROVE)
     save = tmp_path / ".plumpick.json"
