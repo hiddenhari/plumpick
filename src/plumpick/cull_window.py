@@ -89,7 +89,7 @@ class CullWindow(QMainWindow):
             (("Right", "Space", "D"), self.next_image),
             (("Left", "A"), self.prev_image),
             (("K", "Up", "W"), lambda: self.mark_and_advance(Mark.APPROVE)),
-            (("X", "Down", "D", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
+            (("X", "Down", "S", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
             (("R", "End", "/"), self.clear_mark),
             ((QKeySequence.StandardKey.Undo,), self.undo),
             ((QKeySequence.StandardKey.Redo,), self.redo),
