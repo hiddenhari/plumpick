@@ -45,6 +45,11 @@ A fast desktop app for sorting large batches of **generated images** (Stable Dif
 - **Group by batch:** cluster images that share a prompt (or have near-identical metadata) so you compare variants side by side.
 - **Compare mode** (later): 2–4 images side by side, keep the best and reject the rest with one key.
 - **Duplicate / near-duplicate detection** (later): perceptual hash (`imagehash`) to flag near-identical outputs.
+- **Keep/reject statistics** (later): a persistent record of the metadata of every kept and deleted image, so you can see which LoRAs, checkpoints, trigger words and prompt tags get kept or rejected most often.
+  - **What to record:** for each committed decision, the parsed LoRAs (A1111 `<lora:name:weight>` tags, ComfyUI `LoraLoader` nodes) with their weights, the checkpoint, the sampler/steps/CFG, and the prompt split into normalized tags (split on commas, lowercased, `(tag:1.2)` weights removed and stored separately). Also record the folder it came from and the time.
+  - **When to record:** at commit, not when a key is pressed, so undo and changed minds don't count. Key rows by a content hash (or path+size+mtime) so reopening a folder and committing again doesn't count the same image twice. Deleted files are gone after a commit, so this store is the only place their metadata survives.
+  - **Scope:** one SQLite database per machine (`%LOCALAPPDATA%/plumpick/stats.sqlite`), with a folder column on every row. Machine-wide is what answers "which LoRAs do I keep"; the folder column still lets you filter down to one project. A per-folder file would split the data the same way sessions are split today (see §7).
+  - **View:** a stats window with a table per dimension (LoRA, tag, checkpoint, …): kept, rejected, keep rate, and the count. Hide or grey out rows with few samples so a tag seen twice at 100% doesn't rank first. Filters by folder and date range. Later, LoRA weight buckets (does this LoRA get kept at 0.6 but rejected at 1.0?).
 
 ## 4. Architecture
 
@@ -138,6 +143,7 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 - Compare mode (2–4 up).
 - Near-duplicate detection with perceptual hash.
 - Auto-advance timer / “slideshow cull”.
+- Keep/reject statistics over LoRAs, trigger words and prompt tags (see §3).
 - Watch the folder for new images while a generator is running (live culling of a ComfyUI output dir).
 - On-screen buttons for each shortcut (prev / next / approve / delete / clear / undo / redo) in a bottom toolbar next to Commit. Build them from `QAction`s that own the shortcuts, so keys, buttons and tooltips share one list. Buttons must be `NoFocus` so `Space` keeps navigating.
 
@@ -169,4 +175,5 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 - Should video outputs (mp4/webm from generators) be in scope?
 - Is Plumpick meant to be an everyday image viewer, or only a culling tool? As a default viewer it gets opened on folders like Downloads, where a single Delete key press and commit matter more, GIF animation isn't shown, and startup time matters more.
 - Should the scan always be recursive, or be a choice (setting, flag, or a key to toggle)? It is always recursive for now.
+- Where should keep/reject statistics live: per machine, per folder, or per user-defined workspace? §3 proposes one database per machine with a folder column, which can still grow named workspaces later (a workspace = a set of folders). Should it be opt-in, and should it be exportable (CSV) or shareable between machines?
 - Pillow is a declared dependency but unused. Keep it for the planned AVIF fallback, or drop it until then? An app icon should be committed as a ready `.ico` so the build doesn't need Pillow to convert a PNG.
