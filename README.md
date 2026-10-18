@@ -57,6 +57,27 @@ uv run plumpick path/to/images     # opens that folder directly
 uv run python -m plumpick path/to/images   # equivalent
 ```
 
+## Build an exe
+
+```sh
+uv run python scripts/build.py
+```
+
+This writes `dist/plumpick/`, about 100 MB, containing `plumpick.exe` and an `_internal/` folder. Ship the whole folder (zip it); the exe doesn't run on its own. Users don't need Python installed. Drag a folder onto `plumpick.exe` to open it, or run the exe to get a folder picker.
+
+## Release
+
+Releases are built by GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)). To publish one:
+
+1. Bump `version` in `pyproject.toml` (`uv version --bump minor`, or `patch`), commit and push.
+2. Tag that commit with the same version and push the tag:
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+The workflow checks the tag matches `pyproject.toml`, runs the tests, builds the exe on Windows, and publishes a GitHub Release with `plumpick-v0.2.0-windows-x64.zip` attached. Progress is in the repo's **Actions** tab. If it fails, fix the problem, then delete and re-push the tag (`git tag -d v0.2.0 && git push origin :v0.2.0`).
+
 ## Test
 
 ```sh

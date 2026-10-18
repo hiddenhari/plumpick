@@ -1,0 +1,51 @@
+# Push a tag like v0.1.0 to build the Windows app and publish it as a GitHub Release.
+# The tag must match `version` in pyproject.toml.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      ZIP: plumpick-${{ github.ref_name }}-windows-x64.zip
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Check tag matches pyproject version
+        shell: bash
+        run: |
+          version="v$(uv version --short)"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match pyproject.toml version $version"
+            exit 1
+          fi
+
+      - run: uv sync --locked
+
+      - run: uv run pytest
+
+      - run: uv run python scripts/build.py
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/plumpick -DestinationPath $env:ZIP
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" \
+            --title "Plumpick $GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Windows 10/11, 64-bit. Unzip \`$ZIP\` anywhere and run \`plumpick/plumpick.exe\` (keep the \`_internal\` folder next to it). No Python needed.
+
+          The exe is not code-signed, so Windows SmartScreen may warn on first launch: click **More info** → **Run anyway**."

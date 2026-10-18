@@ -139,6 +139,7 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 - Near-duplicate detection with perceptual hash.
 - Auto-advance timer / “slideshow cull”.
 - Watch the folder for new images while a generator is running (live culling of a ComfyUI output dir).
+- On-screen buttons for each shortcut (prev / next / approve / delete / clear / undo / redo) in a bottom toolbar next to Commit. Build them from `QAction`s that own the shortcuts, so keys, buttons and tooltips share one list. Buttons must be `NoFocus` so `Space` keeps navigating.
 
 **M6 — Distribution**
 - PyInstaller build script, app icon, Inno Setup installer, GitHub release.
