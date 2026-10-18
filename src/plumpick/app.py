@@ -5,15 +5,20 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QFileDialog
 
 from plumpick.cull_window import CullWindow
 from plumpick.library import Library
 
+ICON = Path(__file__).parent / "assets" / "plumpick.ico"
+
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv if argv is None else argv
+    _set_app_id()
     app = QApplication(argv)
+    app.setWindowIcon(QIcon(str(ICON)))
 
     # A folder, or an image file (e.g. from Explorer's "Open with"), which
     # opens its folder at that image.
@@ -37,3 +42,13 @@ def main(argv: list[str] | None = None) -> int:
     window = CullWindow(Library.from_path(path))
     window.show()
     return app.exec()
+
+
+def _set_app_id() -> None:
+    """Run from source, the process is python.exe, and the taskbar would group
+    the window under Python with Python's icon. Its own app ID gives it its own
+    taskbar button with the window icon. The built exe doesn't need this."""
+    if sys.platform == "win32" and not getattr(sys, "frozen", False):
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("plumpick")
