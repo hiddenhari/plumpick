@@ -10,7 +10,7 @@ from plumpick.commit import (
     plan_commit,
     run_commit,
 )
-from plumpick.library import Library, Mark
+from plumpick.library import Library, Mark, scan_folder
 
 
 def make_marked_library(root: Path, marks: list[Mark | None]) -> Library:
@@ -132,3 +132,17 @@ def test_empty_plan_touches_nothing(tmp_path: Path) -> None:
 )
 def test_format_bytes(size: int, text: str) -> None:
     assert format_bytes(size) == text
+
+
+def test_moves_keep_the_subfolder_structure(tmp_path: Path) -> None:
+    for rel in ["a/same.png", "b/same.png"]:
+        (tmp_path / rel).parent.mkdir()
+        (tmp_path / rel).write_bytes(rel.encode())
+    lib = Library.from_folder(tmp_path)
+    lib.marks = {lib.paths[0]: Mark.DELETE, lib.paths[1]: Mark.APPROVE}
+
+    run_commit(plan_commit(lib, move_kept=True), Destination.REJECTED_FOLDER)
+
+    assert (tmp_path / REJECTED_DIR / "a" / "same.png").read_bytes() == b"a/same.png"
+    assert (tmp_path / KEPT_DIR / "b" / "same.png").read_bytes() == b"b/same.png"
+    assert scan_folder(tmp_path) == []  # committed files don't come back

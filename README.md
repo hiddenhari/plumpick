@@ -6,13 +6,13 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 
 ## Current state
 
-- Open a folder (pass it on the command line, or pick it in a dialog). Images directly inside it are listed, sorted by name. Subfolders are not scanned. 
+- Open a folder (pass it on the command line, or pick it in a dialog). Images in it and its subfolders are listed: each folder's images sorted by name, then its subfolders in name order. `_rejected/`, `_kept/`, hidden folders and links are skipped. The status bar shows the path relative to the opened folder.
 - Open an image file instead, and its folder opens at that image. On Windows, right-click an image → **Open with** → **Choose another app** → browse to `plumpick.exe`; after that Plumpick stays in the Open with list.
 - View one image at a time, scaled to fit the window, with EXIF rotation applied.
 - Mark each image as approve or delete. The image gets a green or red border, and the status bar shows the position, filename, and counts of approved, delete and undecided images.
 - Undo / redo of marks.
 - Decisions are saved to `.plumpick.json` in the folder as you go, so reopening the folder resumes where you left off.
-- Commit (`Ctrl+Enter` or the **Commit…** button): files marked for delete go to the Recycle Bin or a `_rejected/` subfolder (the last choice is remembered), and approved files can optionally be moved to `_kept/`. Existing files are never overwritten. Afterwards the view jumps to the first undecided image. Commit can't be undone from the app, but nothing is permanently deleted.
+- Commit (`Ctrl+Enter` or the **Commit…** button): files marked for delete go to the Recycle Bin or a `_rejected/` subfolder (the last choice is remembered), and approved files can optionally be moved to `_kept/`. Files from subfolders keep their subfolder inside those (`a/x.png` → `_rejected/a/x.png`). Existing files are never overwritten. Afterwards the view jumps to the first undecided image. Commit can't be undone from the app, but nothing is permanently deleted.
 - Supported: `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif`.
 
 | Key | Action |
@@ -30,7 +30,6 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 - Background prefetch and an image cache. Each image is currently decoded from disk when you navigate to it.
 - Thumbnail grid and filmstrip~~, with filters~~.
 - Zoom, remappable shortcuts, drag-and-drop, recent folders.
-- Recursive folder scan.
 - AVIF support.
 
 

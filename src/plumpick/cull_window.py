@@ -138,7 +138,7 @@ class CullWindow(QMainWindow):
         badge = f"  [{mark.value.upper()}]" if mark else ""
         self.setWindowTitle(f"{lib.current.name} — Plumpick")
         self.statusBar().showMessage(
-            f"{lib.index + 1} / {len(lib)}   {lib.current.name}{badge}"
+            f"{lib.index + 1} / {len(lib)}   {lib.current.relative_to(lib.root).as_posix()}{badge}"
             f"      approved {lib.count(Mark.APPROVE)}"
             f" · delete {lib.count(Mark.DELETE)}"
             f" · undecided {lib.undecided}"

@@ -372,7 +372,48 @@ def test_opening_a_folder_or_unknown_file_keeps_saved_index(tmp_path: Path) -> N
 
 
 @pytest.mark.skipif(os.name != "nt", reason="case-insensitive names on Windows")
-def test_goto_name_ignores_case_on_windows(tmp_path: Path) -> None:
+def test_goto_path_ignores_case_on_windows(tmp_path: Path) -> None:
     lib = make_library_with_files(tmp_path, 3)
-    assert lib.goto_name("IMG1.PNG")
+    assert lib.goto_path(tmp_path / "IMG1.PNG")
     assert lib.index == 1
+
+
+def test_scan_includes_subfolders_after_each_folders_own_images(tmp_path: Path) -> None:
+    for rel in ["b.png", "A.png", "sub/z.png", "sub/deep/y.png", "Other/x.png"]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).touch()
+
+    assert [p.relative_to(tmp_path).as_posix() for p in scan_folder(tmp_path)] == [
+        "A.png",
+        "b.png",
+        "Other/x.png",
+        "sub/z.png",
+        "sub/deep/y.png",
+    ]
+
+
+def test_scan_skips_commit_output_and_hidden_folders(tmp_path: Path) -> None:
+    for rel in ["keep.png", "_rejected/r.png", "_kept/k.png", ".cache/c.png", "sub/_kept/k.png"]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).touch()
+
+    assert [p.name for p in scan_folder(tmp_path)] == ["keep.png"]
+
+
+def test_opening_an_image_matches_its_path_not_just_its_name(tmp_path: Path) -> None:
+    for rel in ["same.png", "sub/same.png"]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).touch()
+
+    lib = Library.from_folder(tmp_path, start=tmp_path / "sub" / "same.png")
+
+    assert lib.current == tmp_path / "sub" / "same.png"
+
+
+def test_marks_in_subfolders_survive_reopening(tmp_path: Path) -> None:
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "a.png").touch()
+    lib = Library.from_folder(tmp_path)
+    lib.set_mark(Mark.DELETE)
+
+    assert Library.from_folder(tmp_path).marks == {tmp_path / "sub" / "a.png": Mark.DELETE}

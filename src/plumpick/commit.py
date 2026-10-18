@@ -13,10 +13,7 @@ from pathlib import Path
 
 from send2trash import send2trash
 
-from plumpick.library import Library, Mark
-
-REJECTED_DIR = "_rejected"
-KEPT_DIR = "_kept"
+from plumpick.library import KEPT_DIR, REJECTED_DIR, Library, Mark
 
 
 class Destination(Enum):
@@ -78,12 +75,14 @@ def free_path(folder: Path, name: str) -> Path:
 
 
 def move_into(path: Path, folder: Path) -> None:
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     shutil.move(path, free_path(folder, path.name))
 
 
-def mover(folder: Path) -> Callable[[Path], None]:
-    return lambda path: move_into(path, folder)
+def mover(root: Path, dir_name: str) -> Callable[[Path], None]:
+    """Move files into `root/dir_name/`, keeping their subfolder under root,
+    so `root/a/x.png` goes to `root/_rejected/a/x.png`."""
+    return lambda path: move_into(path, root / dir_name / path.parent.relative_to(root))
 
 
 def run_commit(
@@ -95,9 +94,9 @@ def run_commit(
     delete = (
         trash
         if destination is Destination.RECYCLE_BIN
-        else mover(plan.root / REJECTED_DIR)
+        else mover(plan.root, REJECTED_DIR)
     )
-    keep = mover(plan.root / KEPT_DIR)
+    keep = mover(plan.root, KEPT_DIR)
 
     jobs = [(p, delete) for p in plan.deletes] + [(p, keep) for p in plan.keeps]
 

@@ -15,6 +15,10 @@ from pathlib import Path
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 SAVE_FILE = ".plumpick.json"
+# Where commit.py moves files. The scan skips them, or committed files would
+# come back the next time the folder is opened.
+REJECTED_DIR = "_rejected"
+KEPT_DIR = "_kept"
 
 
 class Mark(Enum):
@@ -30,16 +34,35 @@ class Change:
     mark: Mark | None
 
 
-def scan_folder(folder: Path) -> list[Path]:
-    """Return the images directly inside `folder`, sorted by name."""
-    return sorted(
-        (
-            p
-            for p in folder.iterdir()
-            if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
-        ),
-        key=lambda p: p.name.lower(),
+def _skip_dir(path: Path) -> bool:
+    return (
+        path.name in (REJECTED_DIR, KEPT_DIR)
+        or path.name.startswith(".")
+        or path.is_symlink()
+        or path.is_junction()  # Windows directory links, which could loop
     )
+
+
+def scan_folder(folder: Path) -> list[Path]:
+    """Return the images in `folder` and its subfolders.
+
+    Each folder's images come sorted by name, before its subfolders' images,
+    which follow in name order. Commit output (`_rejected/`, `_kept/`),
+    hidden folders and links are skipped. Unreadable folders are skipped
+    silently by os.walk.
+    """
+    images: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(folder):
+        here = Path(dirpath)
+        dirnames[:] = sorted(
+            (d for d in dirnames if not _skip_dir(here / d)), key=str.lower
+        )
+        images.extend(
+            here / name
+            for name in sorted(filenames, key=str.lower)
+            if Path(name).suffix.lower() in IMAGE_EXTENSIONS
+        )
+    return images
 
 
 class Library:
@@ -58,12 +81,13 @@ class Library:
         library = cls(folder, scan_folder(folder))
         library.load_session()
         if start is not None:
-            library.goto_name(start.name)
+            library.goto_path(start)
         return library
 
     @classmethod
     def from_path(cls, path: Path) -> Library:
         """Open a folder, or the folder containing an image file at that image."""
+        path = path.absolute()
         if path.is_file():
             return cls.from_folder(path.parent, start=path)
         return cls.from_folder(path)
@@ -137,11 +161,11 @@ class Library:
         self.index = index
         return True
 
-    def goto_name(self, name: str) -> bool:
-        """Move to the image with this file name (case-insensitive on Windows)."""
-        wanted = os.path.normcase(name)
+    def goto_path(self, target: Path) -> bool:
+        """Move to this image (case-insensitive on Windows)."""
+        wanted = os.path.normcase(target)
         for i, path in enumerate(self.paths):
-            if os.path.normcase(path.name) == wanted:
+            if os.path.normcase(path) == wanted:
                 self.index = i
                 return True
         return False

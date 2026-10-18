@@ -156,9 +156,17 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 - **Deleting by accident:** never delete outright; use the Recycle Bin by default, require a commit step, and keep a session log.
 - **ComfyUI metadata varies** from workflow to workflow: parse it as best we can and always show the raw JSON as a fallback.
 - **Python 3.14 wheels:** confirm that PySide6 / Pillow ship 3.14 wheels; if not, pin a 3.12/3.13 venv via `uv`.
+- **Two windows on one folder lose marks.** Every launch is a new process, and each window rewrites the whole `.plumpick.json`, so the last save wins. "Open with" makes this easy to hit: open a second image from a folder that is already open, or select several images in Explorer and press Enter (one process per file). Fix: a single instance. Listen on a `QLocalServer`; a later launch connects with a `QLocalSocket`, sends its path to the running window, and exits. A TODO in `app.py` describes it.
+- **Recursive scan of a big tree.** Opening an image (or a folder) scans everything below it before the first image shows. That takes ~60 ms for 20k images on a local SSD, but opening something in `Pictures/`, a drive root or a network share could take seconds and list unrelated images. Mitigations if it bites: scan in the background and show the opened image first, or add a non-recursive option.
+- **Commit reaches into subfolders.** With the recursive scan, a commit moves marked files out of every subfolder under the opened folder. `_rejected/` and `_kept/` mirror the subfolder layout (`a/x.png` → `_rejected/a/x.png`) so nothing gets flattened or renamed, and the scan skips those folders at any depth so committed files don't come back.
+- **Sessions are per opened folder.** `.plumpick.json` lives in the folder you opened. Opening a parent and later a subfolder gives two separate sessions; marks made in one don't show in the other.
+- **"Open with" uses the exe path.** Explorer remembers where `plumpick.exe` was when it was picked; moving the unzipped folder breaks it until it is picked again. An installer (M6) would give it a stable home. Making Plumpick the default app (not just in "Open with") needs registry entries (a ProgID plus `RegisteredApplications` under HKCU), and Windows still makes the user confirm the choice in Settings. That was tried and left out to keep the scope small.
 
 ## 8. Open questions
 
 - Should commit happen per session, or should each delete apply immediately (to the Recycle Bin)?
 - Are star ratings / color labels useful, or is it strictly binary keep/delete?
 - Should video outputs (mp4/webm from generators) be in scope?
+- Is Plumpick meant to be an everyday image viewer, or only a culling tool? As a default viewer it gets opened on folders like Downloads, where a single Delete key press and commit matter more, GIF animation isn't shown, and startup time matters more.
+- Should the scan always be recursive, or be a choice (setting, flag, or a key to toggle)? It is always recursive for now.
+- Pillow is a declared dependency but unused. Keep it for the planned AVIF fallback, or drop it until then? An app icon should be committed as a ready `.ico` so the build doesn't need Pillow to convert a PNG.
