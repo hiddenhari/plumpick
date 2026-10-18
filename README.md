@@ -7,6 +7,7 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 ## Current state
 
 - Open a folder (pass it on the command line, or pick it in a dialog). Images directly inside it are listed, sorted by name. Subfolders are not scanned. 
+- Open an image file instead, and its folder opens at that image. On Windows, right-click an image → **Open with** → **Choose another app** → browse to `plumpick.exe`; after that Plumpick stays in the Open with list.
 - View one image at a time, scaled to fit the window, with EXIF rotation applied.
 - Mark each image as approve or delete. The image gets a green or red border, and the status bar shows the position, filename, and counts of approved, delete and undecided images.
 - Undo / redo of marks.
@@ -55,6 +56,7 @@ If uv can't find Python 3.14 it will download it. If PySide6 has no wheel for yo
 uv run plumpick                    # opens a folder picker
 uv run plumpick path/to/images     # opens that folder directly
 uv run python -m plumpick path/to/images   # equivalent
+uv run plumpick path/to/images/0042.png    # opens that folder at 0042.png
 ```
 
 ## Build an exe
@@ -63,7 +65,7 @@ uv run python -m plumpick path/to/images   # equivalent
 uv run python scripts/build.py
 ```
 
-This writes `dist/plumpick/`, about 100 MB, containing `plumpick.exe` and an `_internal/` folder. Ship the whole folder (zip it); the exe doesn't run on its own. Users don't need Python installed. Drag a folder onto `plumpick.exe` to open it, or run the exe to get a folder picker.
+This writes `dist/plumpick/`, about 100 MB, containing `plumpick.exe` and an `_internal/` folder. Ship the whole folder (zip it); the exe doesn't run on its own. Users don't need Python installed. Drag a folder or an image onto `plumpick.exe` to open it, or run the exe to get a folder picker.
 
 ## Release
 
@@ -94,7 +96,7 @@ The tests cover `library.py` and `commit.py`, which have no Qt code, so they run
 ```
 src/plumpick/
   __main__.py       # python -m plumpick
-  app.py            # QApplication setup, folder choice, opens the window
+  app.py            # QApplication setup, folder/file choice, opens the window
   library.py        # image list, cursor, marks, undo/redo (plain Python, no Qt)
   commit.py         # applying marks: Recycle Bin / _rejected/ / _kept/ (plain Python, no Qt)
   commit_dialog.py  # the confirm dialog before a commit

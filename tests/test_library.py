@@ -338,3 +338,41 @@ def test_apply_commit_removing_everything(tmp_path: Path) -> None:
     lib.marks = {p: Mark.DELETE for p in lib.paths}
     lib.apply_commit(list(lib.paths))
     assert lib.current is None and lib.index == 0 and lib.marks == {}
+
+
+def test_opening_an_image_starts_at_it(tmp_path: Path) -> None:
+    for name in ["a.png", "b.png", "c.png"]:
+        (tmp_path / name).touch()
+
+    lib = Library.from_path(tmp_path / "b.png")
+
+    assert lib.root == tmp_path
+    assert lib.current == tmp_path / "b.png"
+
+
+def test_opened_image_wins_over_saved_index(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 3)
+    lib.goto(2)
+    lib.set_mark(Mark.APPROVE)  # saves index 2
+
+    lib = Library.from_path(tmp_path / "img0.png")
+
+    assert lib.index == 0
+    assert lib.marks == {tmp_path / "img2.png": Mark.APPROVE}  # marks still resume
+
+
+def test_opening_a_folder_or_unknown_file_keeps_saved_index(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 3)
+    lib.goto(1)
+    lib.set_mark(Mark.APPROVE)
+    (tmp_path / "notes.txt").touch()
+
+    assert Library.from_path(tmp_path).index == 1
+    assert Library.from_path(tmp_path / "notes.txt").index == 1
+
+
+@pytest.mark.skipif(os.name != "nt", reason="case-insensitive names on Windows")
+def test_goto_name_ignores_case_on_windows(tmp_path: Path) -> None:
+    lib = make_library_with_files(tmp_path, 3)
+    assert lib.goto_name("IMG1.PNG")
+    assert lib.index == 1

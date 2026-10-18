@@ -52,10 +52,21 @@ class Library:
         self.redos: list[Change] = []
 
     @classmethod
-    def from_folder(cls, folder: Path) -> Library:
+    def from_folder(cls, folder: Path, start: Path | None = None) -> Library:
+        """Scan `folder` and resume its session. If `start` names one of its
+        images, begin there instead of at the saved index."""
         library = cls(folder, scan_folder(folder))
         library.load_session()
+        if start is not None:
+            library.goto_name(start.name)
         return library
+
+    @classmethod
+    def from_path(cls, path: Path) -> Library:
+        """Open a folder, or the folder containing an image file at that image."""
+        if path.is_file():
+            return cls.from_folder(path.parent, start=path)
+        return cls.from_folder(path)
 
     def __len__(self) -> int:
         return len(self.paths)
@@ -125,6 +136,15 @@ class Library:
             return False
         self.index = index
         return True
+
+    def goto_name(self, name: str) -> bool:
+        """Move to the image with this file name (case-insensitive on Windows)."""
+        wanted = os.path.normcase(name)
+        for i, path in enumerate(self.paths):
+            if os.path.normcase(path.name) == wanted:
+                self.index = i
+                return True
+        return False
 
     def _write_mark(self, path: Path, mark: Mark | None) -> None:
         if mark is None:
