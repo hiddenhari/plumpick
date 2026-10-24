@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from plumpick.library import Library, Mark, scan_folder
+from plumpick.cull.library import Library, Mark, scan_folder
 
 
 def make_library(tmp_path: Path, n: int = 3) -> Library:
