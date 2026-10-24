@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from plumpick.library import IMAGE_EXTENSIONS
+from plumpick.cull.library import IMAGE_EXTENSIONS
 
 
 class WelcomeWindow(QMainWindow):

@@ -15,10 +15,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from plumpick.commit import run_commit
-from plumpick.commit_dialog import CommitDialog
-from plumpick.image_view import ImageView
-from plumpick.library import Library, Mark
+from plumpick.cull.commit import run_commit
+from plumpick.cull.commit_dialog import CommitDialog
+from plumpick.cull.image_view import ImageView
+from plumpick.cull.library import Library, Mark
 
 BORDER_WIDTH = 6
 BORDER_COLORS = {Mark.APPROVE: "#3fb950", Mark.DELETE: "#f85149", None: "transparent"}

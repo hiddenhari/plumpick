@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from plumpick.commit import (
+from plumpick.cull.commit import (
     KEPT_DIR,
     REJECTED_DIR,
     Destination,
@@ -10,7 +10,7 @@ from plumpick.commit import (
     plan_commit,
     run_commit,
 )
-from plumpick.library import Library, Mark, scan_folder
+from plumpick.cull.library import Library, Mark, scan_folder
 
 
 def make_marked_library(root: Path, marks: list[Mark | None]) -> Library:

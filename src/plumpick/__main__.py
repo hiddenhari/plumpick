@@ -1,3 +1,3 @@
-from plumpick.app import main
+from plumpick.app.app import main
 
 raise SystemExit(main())

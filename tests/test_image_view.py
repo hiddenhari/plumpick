@@ -1,8 +1,8 @@
 import pytest
 from PySide6.QtCore import QPointF, QSizeF
 
-from plumpick import image_view
-from plumpick.image_view import (
+from plumpick.cull import image_view
+from plumpick.cull.image_view import (
     MAX_ZOOM,
     MIN_ZOOM,
     centered_offset,

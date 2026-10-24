@@ -13,7 +13,7 @@ from pathlib import Path
 
 from send2trash import send2trash
 
-from plumpick.library import KEPT_DIR, REJECTED_DIR, Library, Mark
+from plumpick.cull.library import KEPT_DIR, REJECTED_DIR, Library, Mark
 
 
 class Destination(Enum):

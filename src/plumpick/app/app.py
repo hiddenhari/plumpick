@@ -8,11 +8,11 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow
 
-from plumpick.cull_window import CullWindow
-from plumpick.library import Library
-from plumpick.welcome import WelcomeWindow
+from plumpick.app.welcome import WelcomeWindow
+from plumpick.cull.cull_window import CullWindow
+from plumpick.cull.library import Library
 
-ICON = Path(__file__).parent / "assets" / "plumpick.ico"
+ICON = Path(__file__).parent.parent / "assets" / "plumpick.ico"
 
 
 def main(argv: list[str] | None = None) -> int:

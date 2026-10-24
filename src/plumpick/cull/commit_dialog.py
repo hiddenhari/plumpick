@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from plumpick.commit import (
+from plumpick.cull.commit import (
     KEPT_DIR,
     REJECTED_DIR,
     CommitPlan,
@@ -22,7 +22,7 @@ from plumpick.commit import (
     format_bytes,
     plan_commit,
 )
-from plumpick.library import Library, Mark
+from plumpick.cull.library import Library, Mark
 
 DESTINATION_KEY = "commit/destination"
 
