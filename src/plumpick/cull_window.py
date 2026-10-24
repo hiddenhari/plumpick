@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImageReader, QKeySequence, QPixmap, QResizeEvent, QShortcut
-from PySide6.QtWidgets import QLabel, QMainWindow, QMessageBox, QPushButton, QSizePolicy
+from PySide6.QtGui import QImageReader, QKeySequence, QPixmap, QShortcut
+from PySide6.QtWidgets import QFrame, QMainWindow, QMessageBox, QPushButton, QVBoxLayout
 
 from plumpick.commit import run_commit
 from plumpick.commit_dialog import CommitDialog
+from plumpick.image_view import ImageView
 from plumpick.library import Library, Mark
 
 BORDER_WIDTH = 6
@@ -18,19 +19,21 @@ class CullWindow(QMainWindow):
     def __init__(self, library: Library) -> None:
         super().__init__()
         self.library = library
-        self._pixmap = QPixmap()  # full-size image; scaled copies are made on resize
 
-        self.image_label = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
-        # Ignored: the pixmap must not dictate the label's size, or the window
-        # grows to fit every large image and resizing would feed back on itself.
-        self.image_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-        self.setCentralWidget(self.image_label)
+        # The frame carries the approve/delete border; the view fills what's inside it.
+        self.image_frame = QFrame(objectName="imageFrame")
+        self.image_view = ImageView()
+        layout = QVBoxLayout(self.image_frame)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.image_view)
+        self.image_view.zoomChanged.connect(self._update_status)
+        self.setCentralWidget(self.image_frame)
 
         commit_button = QPushButton("Commit…", clicked=self.commit)
         commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
         self.statusBar().addPermanentWidget(commit_button)
 
-        self.setStyleSheet("QMainWindow { background: #1e1e1e; } QLabel { color: #ccc; }")
+        self.setStyleSheet("QMainWindow { background: #1e1e1e; }")
         self.resize(1200, 800)
         self._bind_keys()
         self._load_current()
@@ -91,6 +94,7 @@ class CullWindow(QMainWindow):
             (("K", "Up", "W"), lambda: self.mark_and_advance(Mark.APPROVE)),
             (("X", "Down", "S", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
             (("R", "End", "/"), self.clear_mark),
+            (("Z",), self.image_view.toggle_zoom),
             ((QKeySequence.StandardKey.Undo,), self.undo),
             ((QKeySequence.StandardKey.Redo,), self.redo),
             (("Ctrl+Return", "Ctrl+Enter"), self.commit),
@@ -102,48 +106,49 @@ class CullWindow(QMainWindow):
     def _load_current(self) -> None:
         """Decode the current file from disk, then redraw."""
         path = self.library.current
-        self._pixmap = QPixmap()
+        pixmap = QPixmap()
         if path is not None:
             reader = QImageReader(str(path))
             reader.setAutoTransform(True)  # respect EXIF rotation
             image = reader.read()
             if not image.isNull():
-                self._pixmap = QPixmap.fromImage(image)
+                pixmap = QPixmap.fromImage(image)
+
+        if path is None:
+            self.image_view.set_message("No images in this folder.")
+        elif pixmap.isNull():
+            self.image_view.set_message(f"Could not load {path.name}")
+        else:
+            self.image_view.set_pixmap(pixmap)  # resets zoom to fit
         self._refresh()
 
     def _refresh(self) -> None:
-        """Redraw from the already-loaded pixmap (cheap; no disk access)."""
+        """Update border, title and status. Leaves the image (and its zoom) alone."""
         lib = self.library
         mark = lib.current_mark
-        self.image_label.setStyleSheet(
-            f"QLabel {{ border: {BORDER_WIDTH}px solid {BORDER_COLORS[mark]}; }}"
+        self.image_frame.setStyleSheet(
+            f"QFrame#imageFrame {{ border: {BORDER_WIDTH}px solid {BORDER_COLORS[mark]}; }}"
         )
 
         if lib.current is None:
-            self.image_label.setText("No images in this folder.")
             self.setWindowTitle("Plumpick")
             return
 
-        if self._pixmap.isNull():
-            self.image_label.setText(f"Could not load {lib.current.name}")
-        else:
-            self.image_label.setPixmap(
-                self._pixmap.scaled(
-                    self.image_label.contentsRect().size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-
-        badge = f"  [{mark.value.upper()}]" if mark else ""
         self.setWindowTitle(f"{lib.current.name} — Plumpick")
+        self._update_status()
+
+    def _update_status(self) -> None:
+        """Rewrite the status bar. Also runs on zoom changes, so it stays cheap."""
+        lib = self.library
+        if lib.current is None:
+            return
+        mark = lib.current_mark
+        badge = f"  [{mark.value.upper()}]" if mark else ""
+        zoom = self.image_view.zoom_percent
         self.statusBar().showMessage(
             f"{lib.index + 1} / {len(lib)}   {lib.current.relative_to(lib.root).as_posix()}{badge}"
             f"      approved {lib.count(Mark.APPROVE)}"
             f" · delete {lib.count(Mark.DELETE)}"
             f" · undecided {lib.undecided}"
+            + (f"      {zoom}%" if zoom is not None else "")
         )
-
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        super().resizeEvent(event)
-        self._refresh()
