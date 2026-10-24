@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImageReader, QKeySequence, QPixmap, QShortcut
-from PySide6.QtWidgets import QFrame, QMainWindow, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from plumpick.commit import run_commit
 from plumpick.commit_dialog import CommitDialog
@@ -13,6 +22,29 @@ from plumpick.library import Library, Mark
 
 BORDER_WIDTH = 6
 BORDER_COLORS = {Mark.APPROVE: "#3fb950", Mark.DELETE: "#f85149", None: "transparent"}
+
+
+# (keys, action): each key is drawn as a small keycap box.
+SHORTCUT_HINTS = [
+    (("←", "→"), "prev/next"),
+    (("K", "↑"), "keep"),
+    (("X", "↓", "Del"), "reject"),
+    (("R", "/"), "reset mark"),
+    (("Ctrl+Enter",), "commit"),
+]
+
+
+def _build_hints() -> QWidget:
+    box = QWidget(objectName="hints")
+    layout = QHBoxLayout(box)
+    layout.setContentsMargins(0, 0, 12, 0)
+    layout.setSpacing(4)
+    for keys, action in SHORTCUT_HINTS:
+        for key in keys:
+            layout.addWidget(QLabel(key, objectName="key"))
+        layout.addWidget(QLabel(action))
+        layout.addSpacing(8)
+    return box
 
 
 class CullWindow(QMainWindow):
@@ -29,12 +61,18 @@ class CullWindow(QMainWindow):
         self.image_view.zoomChanged.connect(self._update_status)
         self.setCentralWidget(self.image_frame)
 
-        commit_button = QPushButton("Commit…", clicked=self.commit)
-        commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
-        self.statusBar().addPermanentWidget(commit_button)
+        self.commit_button = QPushButton("Commit…", clicked=self.commit)
+        self.commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
+        self.hints = _build_hints()
+        self.statusBar().addPermanentWidget(self.hints)
+        self.statusBar().addPermanentWidget(self.commit_button)
 
-        self.setStyleSheet("QMainWindow { background: #1e1e1e; }")
-        self.resize(1200, 800)
+        self.setStyleSheet(
+            "QMainWindow { background: #1e1e1e; }"
+            "#hints QLabel { color: #999; }"
+            "#key { color: #ccc; border: 1px solid #666; border-radius: 3px; padding: 0 4px; }"
+        )
+        self.resize(1400, 900)
         self._bind_keys()
         self._load_current()
 
@@ -84,6 +122,18 @@ class CullWindow(QMainWindow):
                 f"{len(result.failed)} files could not be moved and are still marked:\n\n"
                 + "\n".join(lines),
             )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._update_hints()
+
+    def _update_hints(self) -> None:
+        """Show the shortcut hints only if they fit beside the status text."""
+        bar = self.statusBar()
+        text_width = bar.fontMetrics().horizontalAdvance(bar.currentMessage())
+        needed = text_width + self.hints.sizeHint().width()
+        needed += self.commit_button.sizeHint().width() + 40
+        self.hints.setVisible(self.width() >= needed)
 
     # --- internals ---------------------------------------------------------
 
@@ -152,3 +202,4 @@ class CullWindow(QMainWindow):
             f" · undecided {lib.undecided}"
             + (f"      {zoom}%" if zoom is not None else "")
         )
+        self._update_hints()
