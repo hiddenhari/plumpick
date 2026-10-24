@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QFileDialog
+from PySide6.QtWidgets import QApplication, QMainWindow
 
 from plumpick.cull_window import CullWindow
 from plumpick.library import Library
+from plumpick.welcome import WelcomeWindow
 
 ICON = Path(__file__).parent / "assets" / "plumpick.ico"
 
@@ -27,20 +28,29 @@ def main(argv: list[str] | None = None) -> int:
     # .plumpick.json, and the last save wins. Fix with a single instance:
     # listen on a QLocalServer; a later launch connects with a QLocalSocket,
     # sends its path to the running window, and exits.
+    windows: list[QMainWindow] = []
+
+    def open_path(path: Path) -> None:
+        window = CullWindow(Library.from_path(path))
+        windows.append(window)
+        window.show()
+
     if len(argv) > 1:
         path = Path(argv[1])
+        if not path.exists():
+            print(f"Not found: {path}", file=sys.stderr)
+            return 1
+        open_path(path)
     else:
-        chosen = QFileDialog.getExistingDirectory(None, "Open image folder")
-        if not chosen:
-            return 0
-        path = Path(chosen)
+        welcome = WelcomeWindow()
 
-    if not path.exists():
-        print(f"Not found: {path}", file=sys.stderr)
-        return 1
+        def on_chosen(path: Path) -> None:
+            open_path(path)
+            welcome.close()
 
-    window = CullWindow(Library.from_path(path))
-    window.show()
+        welcome.pathChosen.connect(on_chosen)
+        windows.append(welcome)
+        welcome.show()
     return app.exec()
 
 
