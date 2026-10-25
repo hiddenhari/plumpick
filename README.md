@@ -30,14 +30,13 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 - Background prefetch and an image cache. Each image is currently decoded from disk when you navigate to it.
 - Thumbnail grid and filmstrip~~, with filters~~.
 - Zoom, remappable shortcuts, drag-and-drop, recent folders.
-- AVIF support.
 
 
 ## Requirements
 
 - Python 3.14 (see `.python-version`) and [uv](https://docs.astral.sh/uv/)
 - Windows is the development platform. Linux and macOS are untested.
-- Runtime dependencies (installed by uv): `pyside6-essentials`, `pillow`, `send2trash`. *`pillow` is declared but not used by the code yet.*
+- Runtime dependencies (installed by uv): `pyside6-essentials`, `pillow`, `pillow-heif`, `send2trash`.
 
 ## Setup on a new machine
 

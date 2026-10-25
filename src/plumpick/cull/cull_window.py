@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImageReader, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -19,6 +19,7 @@ from plumpick.cull.commit import run_commit
 from plumpick.cull.commit_dialog import CommitDialog
 from plumpick.cull.image_view import ImageView
 from plumpick.cull.library import Library, Mark
+from plumpick.cull.loader import load_image
 
 BORDER_WIDTH = 6
 BORDER_COLORS = {Mark.APPROVE: "#3fb950", Mark.DELETE: "#f85149", None: "transparent"}
@@ -158,9 +159,7 @@ class CullWindow(QMainWindow):
         path = self.library.current
         pixmap = QPixmap()
         if path is not None:
-            reader = QImageReader(str(path))
-            reader.setAutoTransform(True)  # respect EXIF rotation
-            image = reader.read()
+            image = load_image(path)
             if not image.isNull():
                 pixmap = QPixmap.fromImage(image)
 

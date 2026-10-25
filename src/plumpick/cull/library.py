@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
+IMAGE_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif",
+    ".heic", ".heif", ".avif", ".tif", ".tiff",
+}
 SAVE_FILE = ".plumpick.json"
 # Where commit.py moves files. The scan skips them, or committed files would
 # come back the next time the folder is opened.
