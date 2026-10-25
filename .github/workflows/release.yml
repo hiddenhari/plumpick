@@ -32,7 +32,25 @@ jobs:
 
       - run: uv run pytest
 
-      - run: uv run python scripts/build.py
+      # The prebuilt PyInstaller bootloader is a known antivirus false-positive trigger (many
+      # malware samples use the same binary). Compiling it here gives the exe its own.
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Compile the PyInstaller bootloader from source
+        shell: bash
+        run: |
+          runw=.venv/Lib/site-packages/PyInstaller/bootloader/Windows-64bit-intel/runw.exe
+          stock=$(sha256sum "$runw")
+          version=$(uv run --no-sync python -c "from importlib.metadata import version; print(version('pyinstaller'))")
+          # --no-cache: otherwise uv may reuse a cached wheel that holds the prebuilt bootloader.
+          PYINSTALLER_COMPILE_BOOTLOADER=1 uv pip install             --reinstall-package pyinstaller --no-cache --no-binary pyinstaller "pyinstaller==$version"
+          if [ "$stock" = "$(sha256sum "$runw")" ]; then
+            echo "The bootloader was not recompiled"
+            exit 1
+          fi
+
+      # --no-sync: `uv run` would otherwise put the prebuilt PyInstaller back.
+      - run: uv run --no-sync python scripts/build.py
 
       - name: Zip
         shell: pwsh

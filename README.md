@@ -78,7 +78,7 @@ Releases are built by GitHub Actions ([.github/workflows/release.yml](.github/wo
    git push origin v0.2.0
    ```
 
-The workflow checks the tag matches `pyproject.toml`, runs the tests, builds the exe on Windows, and publishes a GitHub Release with `plumpick-v0.2.0-windows-x64.zip` attached. Progress is in the repo's **Actions** tab. If it fails, fix the problem, then delete and re-push the tag (`git tag -d v0.2.0 && git push origin :v0.2.0`).
+The workflow checks the tag matches `pyproject.toml`, runs the tests, compiles PyInstaller's bootloader from source (the prebuilt one is often flagged by antivirus), builds the exe on Windows, and publishes a GitHub Release with `plumpick-v0.2.0-windows-x64.zip` attached. Progress is in the repo's **Actions** tab. If it fails, fix the problem, then delete and re-push the tag (`git tag -d v0.2.0 && git push origin :v0.2.0`).
 
 ## Test
 
