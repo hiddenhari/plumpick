@@ -53,7 +53,9 @@ class WelcomeWindow(QMainWindow):
             f"QMainWindow, QWidget {{ background: {t.background}; color: {t.text}; }}"
             f"#title {{ font-size: 32px; color: {t.text_strong}; }}"
             "#hint { font-size: 15px; }"
-            "QPushButton { padding: 8px 20px; }"
+            f"QPushButton {{ padding: 8px 20px; background: {t.status_bar};"
+            f" border: 1px solid {t.key_border}; border-radius: 3px; }}"
+            f"QPushButton:pressed {{ background: {t.key_border}; color: {t.text_strong}; }}"
         )
 
     def _choose_folder(self) -> None:

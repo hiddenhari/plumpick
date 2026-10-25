@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QPixmap, QShortcut
+from collections.abc import Callable
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QMouseEvent, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -36,15 +38,59 @@ SHORTCUT_HINTS = [
 ]
 
 
-def _build_hints() -> QWidget:
+class _ClickLabel(QLabel):
+    """A label that acts like a button, so hints can trigger their action."""
+
+    clicked = Signal()
+
+    def _set_pressed(self, pressed: bool) -> None:
+        if self.property("pressed") == pressed:
+            return
+        self.setProperty("pressed", pressed)  # styled via [pressed="true"]
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._set_pressed(True)
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        # Qt keeps sending moves while the button is held; dragging off cancels the click.
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._set_pressed(self.rect().contains(event.position().toPoint()))
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        was_pressed = self.property("pressed")
+        self._set_pressed(False)
+        if (
+            was_pressed
+            and event.button() == Qt.MouseButton.LeftButton
+            and self.rect().contains(event.position().toPoint())
+        ):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+
+def _clickable(label: _ClickLabel, slot: Callable[[], None]) -> _ClickLabel:
+    label.setCursor(Qt.CursorShape.PointingHandCursor)
+    label.clicked.connect(lambda: slot())
+    return label
+
+
+def _build_hints(actions: dict[str, Callable[[], None]]) -> QWidget:
+    """Keycap hints; clicking a key (or its action text) runs that action.
+
+    `actions` maps each key to its callable; the action text runs its first key's."""
     box = QWidget(objectName="hints")
     layout = QHBoxLayout(box)
     layout.setContentsMargins(0, 0, 12, 0)
     layout.setSpacing(4)
     for keys, action in SHORTCUT_HINTS:
         for key in keys:
-            layout.addWidget(QLabel(key, objectName="key"))
-        layout.addWidget(QLabel(action))
+            layout.addWidget(_clickable(_ClickLabel(key, objectName="key"), actions[key]))
+        layout.addWidget(_clickable(_ClickLabel(action), actions[keys[-1]]))
         layout.addSpacing(8)
     return box
 
@@ -65,7 +111,22 @@ class CullWindow(QMainWindow):
 
         self.commit_button = QPushButton("Commit…", clicked=self.commit)
         self.commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
-        self.hints = _build_hints()
+        keep = lambda: self.mark_and_advance(Mark.APPROVE)
+        reject = lambda: self.mark_and_advance(Mark.DELETE)
+        self.hints = _build_hints(
+            {
+                "←": self.prev_image,
+                "→": self.next_image,
+                "K": keep,
+                "↑": keep,
+                "X": reject,
+                "↓": reject,
+                "Del": reject,
+                "R": self.clear_mark,
+                "/": self.clear_mark,
+                "Ctrl+Enter": self.commit,
+            }
+        )
         self.statusBar().addPermanentWidget(self.hints)
         self.statusBar().addPermanentWidget(self.commit_button)
 
@@ -81,8 +142,10 @@ class CullWindow(QMainWindow):
             f"QMainWindow {{ background: {t.background}; }}"
             f"QStatusBar {{ background: {t.status_bar}; color: {t.text}; }}"
             f"#hints QLabel {{ color: {t.text_dim}; }}"
+            f'#hints QLabel[pressed="true"] {{ color: {t.text_strong}; }}'
             f"#key {{ color: {t.text}; border: 1px solid {t.key_border};"
             " border-radius: 3px; padding: 0 4px; }"
+            f'#key[pressed="true"] {{ background: {t.key_border}; }}'
         )
         self.image_view.set_text_color(t.text)
 
