@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from plumpick import theme
 from plumpick.cull.commit import run_commit
 from plumpick.cull.commit_dialog import CommitDialog
 from plumpick.cull.image_view import ImageView
@@ -68,14 +69,22 @@ class CullWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.hints)
         self.statusBar().addPermanentWidget(self.commit_button)
 
-        self.setStyleSheet(
-            "QMainWindow { background: #1e1e1e; }"
-            "#hints QLabel { color: #999; }"
-            "#key { color: #ccc; border: 1px solid #666; border-radius: 3px; padding: 0 4px; }"
-        )
+        self._apply_theme()
+        theme.on_change(self._apply_theme)
         self.resize(1400, 900)
         self._bind_keys()
         self._load_current()
+
+    def _apply_theme(self) -> None:
+        t = theme.current()
+        self.setStyleSheet(
+            f"QMainWindow {{ background: {t.background}; }}"
+            f"QStatusBar {{ background: {t.status_bar}; color: {t.text}; }}"
+            f"#hints QLabel {{ color: {t.text_dim}; }}"
+            f"#key {{ color: {t.text}; border: 1px solid {t.key_border};"
+            " border-radius: 3px; padding: 0 4px; }"
+        )
+        self.image_view.set_text_color(t.text)
 
     # --- actions -----------------------------------------------------------
 

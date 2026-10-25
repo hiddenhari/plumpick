@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from plumpick import theme
 from plumpick.cull.library import IMAGE_EXTENSIONS
 
 
@@ -42,13 +43,18 @@ class WelcomeWindow(QMainWindow):
         layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
         self.setCentralWidget(panel)
 
+        self._apply_theme()
+        theme.on_change(self._apply_theme)
+        self.resize(560, 360)
+
+    def _apply_theme(self) -> None:
+        t = theme.current()
         self.setStyleSheet(
-            "QMainWindow, QWidget { background: #1e1e1e; color: #bbb; }"
-            "#title { font-size: 32px; color: #eee; }"
+            f"QMainWindow, QWidget {{ background: {t.background}; color: {t.text}; }}"
+            f"#title {{ font-size: 32px; color: {t.text_strong}; }}"
             "#hint { font-size: 15px; }"
             "QPushButton { padding: 8px 20px; }"
         )
-        self.resize(560, 360)
 
     def _choose_folder(self) -> None:
         chosen = QFileDialog.getExistingDirectory(self, "Open image folder")

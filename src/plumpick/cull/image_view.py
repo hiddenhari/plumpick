@@ -25,6 +25,7 @@ class ImageView(QWidget):
         super().__init__(parent)
         self._pixmap = QPixmap()  # full-size image; drawn scaled by the painter
         self._message = ""  # shown centered when there is no image
+        self._text_color = QColor("#ccc")
         self._fit_mode = True  # True: refit on resize; False: user has zoomed/panned
         self._drag_last: QPointF | None = None  # last mouse position while dragging
         self.scale = 1.0  # pixels per image pixel
@@ -74,10 +75,14 @@ class ImageView(QWidget):
         """Current zoom as a percentage of the image's pixels, or None without an image."""
         return None if self._pixmap.isNull() else round(self.scale * 100)
 
+    def set_text_color(self, color: str) -> None:
+        self._text_color = QColor(color)
+        self.update()
+
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
         if self._pixmap.isNull():
-            painter.setPen(QColor("#ccc"))
+            painter.setPen(self._text_color)
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._message)
             return
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
