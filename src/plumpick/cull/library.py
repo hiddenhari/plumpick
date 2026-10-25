@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
@@ -37,6 +38,27 @@ class Change:
     mark: Mark | None
 
 
+MAX_IMAGES = 50_000
+MAX_SCAN_SECONDS = 10.0
+
+
+class ScanError(Exception):
+    """The folder can't be opened as a library; the message is for the user."""
+
+
+def _system_dirs() -> set[Path]:
+    names = ("SystemRoot", "ProgramFiles", "ProgramFiles(x86)", "ProgramData")
+    return {Path(os.environ[n]).resolve() for n in names if os.environ.get(n)}
+
+
+def _check_scannable(folder: Path) -> None:
+    resolved = folder.resolve()
+    if resolved.parent == resolved:
+        raise ScanError(f"{folder} is a drive root. Pick a smaller folder.")
+    if any(resolved == d or d in resolved.parents for d in _system_dirs()):
+        raise ScanError(f"{folder} is a system folder. Pick a different folder.")
+
+
 def _skip_dir(path: Path) -> bool:
     return (
         path.name in (REJECTED_DIR, KEPT_DIR)
@@ -53,9 +75,17 @@ def scan_folder(folder: Path) -> list[Path]:
     which follow in name order. Commit output (`_rejected/`, `_kept/`),
     hidden folders and links are skipped. Unreadable folders are skipped
     silently by os.walk.
+
+    Raises ScanError for drive roots and system folders, and when the tree
+    holds more than MAX_IMAGES images or takes longer than MAX_SCAN_SECONDS,
+    so a mis-dropped `C:\\` doesn't hang the app.
     """
+    _check_scannable(folder)
+    deadline = time.monotonic() + MAX_SCAN_SECONDS
     images: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(folder):
+        if time.monotonic() > deadline:
+            raise ScanError(f"Scanning {folder} took too long. Pick a smaller folder.")
         here = Path(dirpath)
         dirnames[:] = sorted(
             (d for d in dirnames if not _skip_dir(here / d)), key=str.lower
@@ -65,6 +95,11 @@ def scan_folder(folder: Path) -> list[Path]:
             for name in sorted(filenames, key=str.lower)
             if Path(name).suffix.lower() in IMAGE_EXTENSIONS
         )
+        if len(images) > MAX_IMAGES:
+            raise ScanError(
+                f"{folder} holds more than {MAX_IMAGES:,} images. "
+                "Pick a smaller folder."
+            )
     return images
 
 

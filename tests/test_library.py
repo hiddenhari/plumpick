@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from plumpick.cull.library import Library, Mark, scan_folder
+from plumpick.cull import library as library_module
+from plumpick.cull.library import Library, Mark, ScanError, scan_folder
 
 
 def make_library(tmp_path: Path, n: int = 3) -> Library:
@@ -24,6 +25,37 @@ def test_scan_folder_keeps_only_images_sorted(tmp_path: Path) -> None:
     (tmp_path / "sub.png").mkdir()  # a folder with an image-like name
 
     assert [p.name for p in scan_folder(tmp_path)] == ["a.jpg", "b.PNG", "c.webp"]
+
+
+def test_scan_folder_refuses_a_drive_root(tmp_path: Path) -> None:
+    with pytest.raises(ScanError, match="drive root"):
+        scan_folder(Path(tmp_path.anchor))
+
+
+def test_scan_folder_refuses_a_system_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+    with pytest.raises(ScanError, match="system folder"):
+        scan_folder(tmp_path / "sub")
+
+
+def test_scan_folder_stops_past_the_image_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(library_module, "MAX_IMAGES", 2)
+    for i in range(3):
+        (tmp_path / f"{i}.png").touch()
+    with pytest.raises(ScanError, match="more than"):
+        scan_folder(tmp_path)
+
+
+def test_scan_folder_stops_past_the_time_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(library_module, "MAX_SCAN_SECONDS", -1.0)
+    with pytest.raises(ScanError, match="too long"):
+        scan_folder(tmp_path)
 
 
 def test_navigation_stops_at_both_ends(tmp_path: Path) -> None:
