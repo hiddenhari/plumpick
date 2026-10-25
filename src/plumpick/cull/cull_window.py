@@ -7,12 +7,12 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QMouseEvent, QPixmap, QShortcut
 from PySide6.QtWidgets import (
+    QSizePolicy,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +25,7 @@ from plumpick.cull.library import Library, Mark
 from plumpick.cull.loader import load_image
 
 BORDER_WIDTH = 6
+WIDE_BAR = 1000  # window width past which the file name is shortened, not dropped
 BORDER_COLORS = {Mark.APPROVE: "#3fb950", Mark.DELETE: "#f85149", None: "transparent"}
 
 
@@ -85,13 +86,18 @@ def _build_hints(actions: dict[str, Callable[[], None]]) -> QWidget:
     `actions` maps each key to its callable; the action text runs its first key's."""
     box = QWidget(objectName="hints")
     layout = QHBoxLayout(box)
-    layout.setContentsMargins(0, 0, 12, 0)
+    layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(4)
-    for keys, action in SHORTCUT_HINTS:
-        for key in keys:
-            layout.addWidget(_clickable(_ClickLabel(key, objectName="key"), actions[key]))
-        layout.addWidget(_clickable(_ClickLabel(action), actions[keys[-1]]))
-        layout.addSpacing(8)
+    layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    for i, (keys, action) in enumerate(SHORTCUT_HINTS):
+        if i:
+            layout.addSpacing(8)
+        accent = action == "commit"  # the one hint that is a big, deliberate step
+        labels = [_ClickLabel(key, objectName="key") for key in keys]
+        labels.append(_ClickLabel(action))
+        for label, key in zip(labels, [*keys, keys[-1]]):
+            label.setProperty("accent", accent)
+            layout.addWidget(_clickable(label, actions[key]))
     return box
 
 
@@ -109,8 +115,6 @@ class CullWindow(QMainWindow):
         self.image_view.zoomChanged.connect(self._update_status)
         self.setCentralWidget(self.image_frame)
 
-        self.commit_button = QPushButton("Commit…", clicked=self.commit)
-        self.commit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
         keep = lambda: self.mark_and_advance(Mark.APPROVE)
         reject = lambda: self.mark_and_advance(Mark.DELETE)
         self.hints = _build_hints(
@@ -127,8 +131,21 @@ class CullWindow(QMainWindow):
                 "Ctrl+Enter": self.commit,
             }
         )
-        self.statusBar().addPermanentWidget(self.hints)
-        self.statusBar().addPermanentWidget(self.commit_button)
+        # One row: status text | hints | empty. The side columns get equal width
+        # (their size hints are ignored), so the hints stay centered in the window.
+        self.status_label = QLabel()  # left: position, file name, zoom
+        self.counts_label = QLabel(alignment=Qt.AlignmentFlag.AlignRight)  # right: tallies
+        self._name_parts = ("", "", "")  # text before the file name, the name, text after
+        self._counts_text = ""
+        for label in (self.status_label, self.counts_label):
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(6, 0, 6, 0)
+        row_layout.addWidget(self.status_label, 1)
+        row_layout.addWidget(self.hints)
+        row_layout.addWidget(self.counts_label, 1)
+        self.statusBar().addWidget(row, 1)
 
         self._apply_theme()
         theme.on_change(self._apply_theme)
@@ -143,9 +160,14 @@ class CullWindow(QMainWindow):
             f"QStatusBar {{ background: {t.status_bar}; color: {t.text}; }}"
             f"#hints QLabel {{ color: {t.text_dim}; }}"
             f'#hints QLabel[pressed="true"] {{ color: {t.text_strong}; }}'
+            f'#hints QLabel[accent="true"] {{ color: {t.text_strong}; font-weight: bold; }}'
             f"#key {{ color: {t.text}; border: 1px solid {t.key_border};"
             " border-radius: 3px; padding: 0 4px; }"
             f'#key[pressed="true"] {{ background: {t.key_border}; }}'
+            f'#key[accent="true"] {{ background: {t.accent}; border-color: {t.accent};'
+            " color: white; }"
+            f'#key[accent="true"][pressed="true"] {{ background: {t.accent_pressed};'
+            f" border-color: {t.accent_pressed}; }}"
         )
         self.image_view.set_text_color(t.text)
 
@@ -201,12 +223,28 @@ class CullWindow(QMainWindow):
         self._update_hints()
 
     def _update_hints(self) -> None:
-        """Show the shortcut hints only if they fit beside the status text."""
-        bar = self.statusBar()
-        text_width = bar.fontMetrics().horizontalAdvance(bar.currentMessage())
-        needed = text_width + self.hints.sizeHint().width()
-        needed += self.commit_button.sizeHint().width() + 40
-        self.hints.setVisible(self.width() >= needed)
+        """Lay out the status bar text around the centered hints.
+
+        Both side columns are `side` wide. Past WIDE_BAR the left text always shows,
+        with the file name shortened to fit; narrower, it shows only if it fits whole.
+        The tallies on the right show only if they fit. Texts are blanked, not hidden,
+        because a hidden label would leave its column and un-center the hints."""
+        side = (self.width() - self.hints.sizeHint().width()) / 2 - 20
+        metrics = self.status_label.fontMetrics()
+
+        before, name, after = self._name_parts
+        fixed = metrics.horizontalAdvance(before + after)
+        if self.width() > WIDE_BAR:
+            name = metrics.elidedText(name, Qt.TextElideMode.ElideMiddle, max(0, int(side - fixed)))
+            left = before + name + after
+        else:
+            left = before + name + after
+            if metrics.horizontalAdvance(left) > side:
+                left = ""
+        self.status_label.setText(left)
+
+        fits = metrics.horizontalAdvance(self._counts_text) <= side
+        self.counts_label.setText(self._counts_text if fits else "")
 
     # --- internals ---------------------------------------------------------
 
@@ -266,11 +304,14 @@ class CullWindow(QMainWindow):
         mark = lib.current_mark
         badge = f"  [{mark.value.upper()}]" if mark else ""
         zoom = self.image_view.zoom_percent
-        self.statusBar().showMessage(
-            f"{lib.index + 1} / {len(lib)}   {lib.current.relative_to(lib.root).as_posix()}{badge}"
-            f"      approved {lib.count(Mark.APPROVE)}"
+        self._name_parts = (
+            f"{lib.index + 1} / {len(lib)}   ",
+            lib.current.relative_to(lib.root).as_posix(),
+            badge + (f"      {zoom}%" if zoom is not None else ""),
+        )
+        self._counts_text = (
+            f"approved {lib.count(Mark.APPROVE)}"
             f" · delete {lib.count(Mark.DELETE)}"
             f" · undecided {lib.undecided}"
-            + (f"      {zoom}%" if zoom is not None else "")
         )
         self._update_hints()
