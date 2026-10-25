@@ -43,7 +43,10 @@ jobs:
           stock=$(sha256sum "$runw")
           version=$(uv run --no-sync python -c "from importlib.metadata import version; print(version('pyinstaller'))")
           # --no-cache: otherwise uv may reuse a cached wheel that holds the prebuilt bootloader.
-          PYINSTALLER_COMPILE_BOOTLOADER=1 uv pip install             --reinstall-package pyinstaller --no-cache --no-binary pyinstaller "pyinstaller==$version"
+          # TEMP/TMP: the default temp dir is spelled both RUNNER~1 and runneradmin, and waf mixes
+          # the two when it works out relative source paths, so it cannot find zlib/*.c.
+          TEMP="$RUNNER_TEMP" TMP="$RUNNER_TEMP" PYINSTALLER_COMPILE_BOOTLOADER=1 uv pip install \
+            --reinstall-package pyinstaller --no-cache --no-binary pyinstaller "pyinstaller==$version"
           if [ "$stock" = "$(sha256sum "$runw")" ]; then
             echo "The bootloader was not recompiled"
             exit 1
