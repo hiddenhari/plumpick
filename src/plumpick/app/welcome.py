@@ -32,7 +32,7 @@ class WelcomeWindow(QMainWindow):
         hint = QLabel("Drop an image or folder here\nor", objectName="hint")
         for label in (title, hint):
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        button = QPushButton("Open folder…", clicked=self._choose_folder)
+        button = QPushButton("Select folder…", clicked=self._choose_folder)
 
         panel = QWidget()
         layout = QVBoxLayout(panel)
