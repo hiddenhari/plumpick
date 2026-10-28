@@ -149,7 +149,7 @@ class CullWindow(QMainWindow):
 
         self._apply_theme()
         theme.on_change(self._apply_theme)
-        self.resize(1400, 900)
+        self._fit_to_screen(1400, 900)
         self._bind_keys()
         self._load_current()
 
@@ -247,6 +247,14 @@ class CullWindow(QMainWindow):
         self.counts_label.setText(self._counts_text if fits else "")
 
     # --- internals ---------------------------------------------------------
+
+    def _fit_to_screen(self, width: int, height: int) -> None:
+        """Start at width x height, but no bigger than 90% of the screen's free area,
+        centered on it. On small or scaled screens a fixed size would push the
+        status bar under the taskbar. The 10% leaves room for the title bar."""
+        area = self.screen().availableGeometry()
+        self.resize(min(width, area.width() * 9 // 10), min(height, area.height() * 9 // 10))
+        self.move(area.center() - self.rect().center())
 
     def _bind_keys(self) -> None:
         bindings = [
