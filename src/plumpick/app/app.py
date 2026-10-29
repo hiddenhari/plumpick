@@ -8,6 +8,11 @@ from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
+from plumpick.app.recent_folders import (
+    load_recent_folders,
+    normalize_folder,
+    remember_folder,
+)
 from plumpick.app.welcome import WelcomeWindow
 from plumpick.cull.cull_window import CullWindow
 from plumpick.cull.library import Library, ScanError
@@ -23,20 +28,29 @@ def main(argv: list[str] | None = None) -> int:
 
     # A folder, or an image file (e.g. from Explorer's "Open with"), which
     # opens its folder at that image.
-    # TODO: every launch is a new process, so opening a second image from a
-    # folder that is already open gives two windows that each overwrite
-    # .plumpick.json, and the last save wins. Fix with a single instance:
-    # listen on a QLocalServer; a later launch connects with a QLocalSocket,
-    # sends its path to the running window, and exits.
+    # TODO: another process can still open this same folder and overwrite its
+    # .plumpick.json. A single-instance QLocalServer would route that path here.
     windows: list[QMainWindow] = []
 
     def open_path(path: Path) -> bool:
+        candidate = path.parent if path.is_file() else path
+        requested = normalize_folder(candidate).casefold()
+        for existing in windows:
+            if isinstance(existing, CullWindow) and existing.isVisible():
+                if normalize_folder(existing.library.root).casefold() == requested:
+                    existing.showNormal()
+                    existing.raise_()
+                    existing.activateWindow()
+                    return True
         try:
             library = Library.from_path(path)
         except ScanError as error:
             QMessageBox.warning(None, "plumpick", str(error))
             return False
-        window = CullWindow(library)
+        window = CullWindow(
+            library, open_folder=open_path, recent_folders=load_recent_folders
+        )
+        remember_folder(library.root)
         windows.append(window)
         window.show()
         return True

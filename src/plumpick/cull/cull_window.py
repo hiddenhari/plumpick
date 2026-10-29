@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import ctypes
+import sys
 from collections.abc import Callable
+from ctypes import wintypes
+from pathlib import Path
 
-from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QTimer, Qt, Signal
 from PySide6.QtGui import (
     QColor,
+    QCursor,
     QKeySequence,
     QLinearGradient,
     QMouseEvent,
@@ -17,12 +22,15 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
-    QSizePolicy,
+    QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QMenu,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +45,12 @@ from plumpick.cull.loader import load_image
 BORDER_WIDTH = 6
 WIDE_BAR = 1000  # window width past which the file name is shortened, not dropped
 BORDER_COLORS = {Mark.APPROVE: "#3fb950", Mark.DELETE: "#f85149", None: "transparent"}
+WM_SYSCOMMAND = 0x0112
+WM_NCRBUTTONUP = 0x00A5
+SC_MOUSEMENU = 0xF090
+SC_KEYMENU = 0xF100
+HTSYSMENU = 3
+HTCAPTION = 2
 
 
 # (keys, action): each key is drawn as a small keycap box.
@@ -181,9 +195,16 @@ class _EdgeGradient(QWidget):
 
 
 class CullWindow(QMainWindow):
-    def __init__(self, library: Library) -> None:
+    def __init__(
+        self,
+        library: Library,
+        open_folder: Callable[[Path], None] | None = None,  # TODO: refactor top menu into its own class
+        recent_folders: Callable[[], list[str]] | None = None,
+    ) -> None:
         super().__init__()
         self.library = library
+        self._open_folder = open_folder
+        self._recent_folders = recent_folders or (lambda: [])
 
         # The frame carries the approve/delete border; the view fills what's inside it.
         self.image_frame = QFrame(objectName="imageFrame")
@@ -239,13 +260,94 @@ class CullWindow(QMainWindow):
         theme.on_change(self._apply_theme)
         self._fit_to_screen(1400, 900)
         self._bind_keys()
+        self._build_files_menu()
         self._load_current()
+
+    def _build_files_menu(self) -> None:
+        self.files_menu = QMenu(self)
+        self.files_menu.setObjectName("filesMenu")
+        select = self.files_menu.addAction("Select folder…")
+        select.triggered.connect(self._select_folder)
+        self.recent_menu = self.files_menu.addMenu("Recent folders")
+        self.recent_menu.aboutToShow.connect(self._populate_recent_menu)
+        self._populate_recent_menu()
+        if not (sys.platform == "win32" and QApplication.platformName() == "windows"):
+            self.files_menu.setTitle("Files")
+            self.menuBar().addMenu(self.files_menu)
+
+    def nativeEvent(self, event_type, message):
+        if sys.platform == "win32" and event_type == b"windows_generic_MSG":
+            native_message = ctypes.cast(
+                int(message), ctypes.POINTER(wintypes.MSG)
+            ).contents
+            if (
+                native_message.message == WM_NCRBUTTONUP
+                and native_message.wParam in (HTSYSMENU, HTCAPTION)
+            ):
+                self._show_files_menu_at(QCursor.pos())
+                return True, 0
+            if native_message.message == WM_SYSCOMMAND:
+                command = int(native_message.wParam) & 0xFFF0
+                if self._handle_window_menu_request(command):
+                    return True, 0
+        return super().nativeEvent(event_type, message)
+
+    def _handle_window_menu_request(self, command: int) -> bool:
+        if command == SC_MOUSEMENU:
+            position = QCursor.pos()
+        elif command == SC_KEYMENU:
+            position = self._titlebar_icon_position()
+        else:
+            return False
+        self._show_files_menu_at(position)
+        return True
+
+    def _show_files_menu_at(self, position: QPoint) -> None:
+        """Defer popup until Windows finishes dispatching its system-menu request."""
+        QTimer.singleShot(0, lambda: self.files_menu.popup(position))
+
+    def _titlebar_icon_position(self) -> QPoint:
+        """Approximate the title-bar icon anchor for the Alt+Space invocation."""
+        return self.frameGeometry().topLeft() + QPoint(8, 28)
+
+    def _select_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select image folder", str(self.library.root)
+        )
+        if folder and self._open_folder:
+            self._open_folder(Path(folder))
+
+    def _populate_recent_menu(self) -> None:
+        self.recent_menu.clear()
+        folders = self._recent_folders()
+        if not folders:
+            empty = self.recent_menu.addAction("No recent folders")
+            empty.setEnabled(False)
+            return
+        for folder in folders:
+            action = self.recent_menu.addAction(Path(folder).name or folder)
+            action.setToolTip(folder)
+            action.triggered.connect(
+                lambda _checked=False, selected=folder: self._open_recent(selected)
+            )
+
+    def _open_recent(self, folder: str) -> None:
+        if self._open_folder:
+            self._open_folder(Path(folder))
 
     def _apply_theme(self) -> None:
         t = theme.current()
         self.setStyleSheet(
             f"QMainWindow {{ background: {t.background}; }}"
             f"QStatusBar {{ background: {t.status_bar}; color: {t.text}; }}"
+            f"QMenu {{ background: {t.status_bar}; color: {t.text};"
+            f" border: 1px solid {t.key_border}; border-radius: 7px; padding: 5px; }}"
+            "QMenu::item { padding: 7px 28px 7px 12px; margin: 2px 4px;"
+            " border-radius: 4px; }"
+            f"QMenu::item:selected {{ background: {t.accent}; color: white; }}"
+            f"QMenu::item:disabled {{ color: {t.text_dim}; }}"
+            f"QMenu::separator {{ height: 1px; background: {t.key_border};"
+            " margin: 5px 8px; }"
             f"#hints QLabel {{ color: {t.text_dim}; }}"
             f'#hints QLabel[pressed="true"] {{ color: {t.text_strong}; }}'
             f'#hints QLabel[accent="true"] {{ color: {t.text_strong}; font-weight: bold; }}'

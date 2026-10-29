@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from ctypes import wintypes
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
@@ -214,6 +216,132 @@ def test_mark_menu_click_sets_mark_without_advancing(
 
     assert set_mark_calls == [Mark.APPROVE, Mark.DELETE]
     assert advance_calls == []
+    window.close()
+
+
+def test_files_menu_select_folder_opens_separate_folder(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    chosen = tmp_path / "chosen"
+    chosen.mkdir()
+    window = CullWindow(Library(tmp_path, []))
+    opened: list[Path] = []
+    window._open_folder = opened.append
+    monkeypatch.setattr(
+        cull_window.QFileDialog,
+        "getExistingDirectory",
+        lambda *_args: str(chosen),
+    )
+
+    assert window.files_menu.actions()[0].text() == "Select folder…"
+    assert window.files_menu.actions()[1].text() == "Recent folders"
+    window.files_menu.actions()[0].trigger()
+
+    assert opened == [chosen]
+    window.close()
+
+
+def test_recent_folder_menu_opens_selected_folder(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    recent = tmp_path / "recent batch"
+    recent.mkdir()
+    opened: list[Path] = []
+    window = CullWindow(
+        Library(tmp_path, []), open_folder=opened.append,
+        recent_folders=lambda: [str(recent)],
+    )
+    actions = window.recent_menu.actions()
+
+    assert len(actions) == 1
+    assert actions[0].text() == recent.name
+    assert actions[0].toolTip() == str(recent)
+    actions[0].trigger()
+
+    assert opened == [recent]
+    window.close()
+
+
+def test_windows_files_command_opens_recent_folder(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    recent = tmp_path / "recent"
+    recent.mkdir()
+    opened: list[Path] = []
+    window = CullWindow(
+        Library(tmp_path, []), open_folder=opened.append,
+        recent_folders=lambda: [str(recent)],
+    )
+    monkeypatch.setattr(cull_window.QTimer, "singleShot", lambda _delay, fn: fn())
+
+    assert window.files_menu.actions()[1].text() == "Recent folders"
+    window._open_recent(str(recent))
+    assert opened == [recent]
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("command", "expected_position"),
+    [
+        (cull_window.SC_MOUSEMENU, QPoint(40, 50)),
+        (cull_window.SC_KEYMENU, None),
+    ],
+)
+def test_windows_icon_menu_request_opens_custom_qt_menu(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    command: int,
+    expected_position: QPoint | None,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    window = CullWindow(Library(tmp_path, []))
+    shown: list[QPoint] = []
+    monkeypatch.setattr(cull_window.QCursor, "pos", lambda: QPoint(40, 50))
+    monkeypatch.setattr(cull_window.QTimer, "singleShot", lambda _delay, fn: fn())
+    monkeypatch.setattr(window.files_menu, "popup", shown.append)
+
+    assert window._handle_window_menu_request(command)
+    assert len(shown) == 1
+    if expected_position is not None:
+        assert shown[0] == expected_position
+    assert [action.text() for action in window.files_menu.actions()] == [
+        "Select folder…",
+        "Recent folders",
+    ]
+    window.close()
+
+
+def test_native_system_menu_message_is_consumed_for_custom_popup(
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    monkeypatch.setattr(cull_window.sys, "platform", "win32")
+    monkeypatch.setattr(cull_window.QCursor, "pos", lambda: QPoint(40, 50))
+    monkeypatch.setattr(cull_window.QTimer, "singleShot", lambda _delay, fn: fn())
+    window = CullWindow(Library(tmp_path, []))
+    shown: list[QPoint] = []
+    monkeypatch.setattr(window.files_menu, "popup", shown.append)
+
+    message = wintypes.MSG()
+    message.message = cull_window.WM_SYSCOMMAND
+    message.wParam = cull_window.SC_MOUSEMENU
+    handled, result = window.nativeEvent(
+        b"windows_generic_MSG", ctypes.addressof(message)
+    )
+
+    assert handled is True
+    assert result == 0
+    assert shown == [QPoint(40, 50)]
     window.close()
 
 
