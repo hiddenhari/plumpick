@@ -136,6 +136,7 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 **M4 — Polish (2 days)**
 - Zoom/pan at 100%, and a hold-key peek at 100%.
 - Configurable shortcuts, dark theme.
+- Proposed settings sprint: top-left **Settings…** dialog with a shortcut manager and recursive image-search toggle (default on). See [design proposal](docs/design/settings-menu.md); documentation only, implementation pending approval.
 - Drag-and-drop folders, recent folders.
 - Stats: “312 kept / 1,840 deleted, 4.2 GB freed”.
 
@@ -174,6 +175,6 @@ Recommendation: start with **A**. If profiling shows the Python layer is a bottl
 - Are star ratings / color labels useful, or is it strictly binary keep/delete?
 - Should video outputs (mp4/webm from generators) be in scope?
 - Is Plumpick meant to be an everyday image viewer, or only a culling tool? As a default viewer it gets opened on folders like Downloads, where a single Delete key press and commit matter more, GIF animation isn't shown, and startup time matters more.
-- Should the scan always be recursive, or be a choice (setting, flag, or a key to toggle)? It is always recursive for now.
+- Recursive scanning is always on today. A settings toggle (default on) is proposed in [Settings menu sprint](docs/design/settings-menu.md); when changes take effect and preservation of out-of-scope session marks still need resolution.
 - Where should keep/reject statistics live: per machine, per folder, or per user-defined workspace? §3 proposes one database per machine with a folder column, which can still grow named workspaces later (a workspace = a set of folders). Should it be opt-in, and should it be exportable (CSV) or shareable between machines?
 - Pillow is a declared dependency but unused. Keep it for the planned AVIF fallback, or drop it until then? An app icon should be committed as a ready `.ico` so the build doesn't need Pillow to convert a PNG.
