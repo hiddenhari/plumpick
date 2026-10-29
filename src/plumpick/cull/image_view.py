@@ -1,7 +1,9 @@
 """Render image with zooming and panning"""
 
-from PySide6.QtCore import QPointF, QSizeF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QSizeF, Qt, Signal
 from PySide6.QtGui import (
+    QAction,
+    QContextMenuEvent,
     QColor,
     QMouseEvent,
     QPainter,
@@ -10,16 +12,24 @@ from PySide6.QtGui import (
     QResizeEvent,
     QWheelEvent,
 )
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QMenu, QWidget
 
 ZOOM_STEP = 1.15  # zoom change per wheel notch
 NOTCH = 120  # Qt reports one standard wheel notch as angleDelta().y() == 120
 MIN_ZOOM = 0.1  # limits, as multiples of the fit scale
 MAX_ZOOM = 8.0
+EDGE_WIDTH = 64  # viewport edge area reserved for previous/next clicks
+EDGE_GRADIENT_EXTRA = 20  # softens the transition just inside the click zone
 
 
 class ImageView(QWidget):
     zoomChanged = Signal(float)  # emitted with the new scale whenever it changes
+    navigate_previous = Signal()
+    navigate_next = Signal()
+    edge_hover_changed = Signal(str)
+    keep_requested = Signal()
+    reject_requested = Signal()
+    clear_mark_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -31,6 +41,9 @@ class ImageView(QWidget):
         self.scale = 1.0  # pixels per image pixel
         self.offset = QPointF(0, 0)  # top-left corner of image, widget coords
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep Space for navigation
+        self.setMouseTracking(True)
+        self._hover_x: float | None = None
+        self._has_mark = False
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         """Show a new image, fitted to the view."""
@@ -43,6 +56,9 @@ class ImageView(QWidget):
         self._pixmap = QPixmap()
         self._message = text
         self.update()
+
+    def set_has_mark(self, marked: bool) -> None:
+        self._has_mark = marked
 
     def fit(self) -> None:
         """Scale the whole image to fit the view, centered."""
@@ -85,10 +101,30 @@ class ImageView(QWidget):
             painter.setPen(self._text_color)
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._message)
             return
+        painter.save()
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.translate(self.offset)
         painter.scale(self.scale, self.scale)
         painter.drawPixmap(0, 0, self._pixmap)
+        painter.restore()
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        menu = QMenu(self)
+        keep = menu.addAction("Keep Image")
+        reject = menu.addAction("Reject Image")
+        clear = menu.addAction("Clear mark")
+        clear.setEnabled(self._has_mark)
+        chosen = self._exec_context_menu(menu, event.globalPos())
+        if chosen is keep:
+            self.keep_requested.emit()
+        elif chosen is reject:
+            self.reject_requested.emit()
+        elif chosen is clear:
+            self.clear_mark_requested.emit()
+
+    def _exec_context_menu(self, menu: QMenu, position: QPoint) -> QAction | None:
+        """Execute the menu; kept separate so actions can be tested without a modal UI."""
+        return menu.exec(position)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         if self._pixmap.isNull():
@@ -104,12 +140,31 @@ class ImageView(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton and not self._pixmap.isNull():
+            x = event.position().x()
+            if x < EDGE_WIDTH:
+                self.navigate_previous.emit()
+                event.accept()
+                return
+            if x >= self.width() - EDGE_WIDTH:
+                self.navigate_next.emit()
+                event.accept()
+                return
             self.toggle_zoom(event.position())
             event.accept()
         else:
             super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            x = event.position().x()
+            if x < EDGE_WIDTH:
+                self.navigate_previous.emit()
+                event.accept()
+                return
+            if x >= self.width() - EDGE_WIDTH:
+                self.navigate_next.emit()
+                event.accept()
+                return
         if event.button() == Qt.MouseButton.LeftButton and not self._pixmap.isNull():
             self._drag_last = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -118,6 +173,16 @@ class ImageView(QWidget):
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        x = event.position().x()
+        hover = x if x < EDGE_WIDTH or x >= self.width() - EDGE_WIDTH else None
+        if hover != self._hover_x:
+            self._hover_x = hover
+            self.edge_hover_changed.emit(
+                "left" if hover is not None and hover < EDGE_WIDTH
+                else "right" if hover is not None
+                else ""
+            )
+            self.update()
         if self._drag_last is None:
             super().mouseMoveEvent(event)
             return
@@ -148,6 +213,12 @@ class ImageView(QWidget):
             self.offset = clamp_offset(
                 self.offset, self._image_size(), self.scale, self._view_size()
             )
+
+    def leaveEvent(self, event) -> None:
+        self._hover_x = None
+        self.edge_hover_changed.emit("")
+        self.update()
+        super().leaveEvent(event)
 
     def _view_changed(self) -> None:
         self.update()

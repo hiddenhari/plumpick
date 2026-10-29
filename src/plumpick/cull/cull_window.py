@@ -4,8 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QMouseEvent, QPixmap, QShortcut
+from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtGui import (
+    QColor,
+    QKeySequence,
+    QLinearGradient,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPixmap,
+    QPolygonF,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QSizePolicy,
     QFrame,
@@ -20,7 +30,7 @@ from PySide6.QtWidgets import (
 from plumpick import theme
 from plumpick.cull.commit import run_commit
 from plumpick.cull.commit_dialog import CommitDialog
-from plumpick.cull.image_view import ImageView
+from plumpick.cull.image_view import EDGE_GRADIENT_EXTRA, EDGE_WIDTH, ImageView
 from plumpick.cull.library import Library, Mark
 from plumpick.cull.loader import load_image
 
@@ -101,6 +111,75 @@ def _build_hints(actions: dict[str, Callable[[], None]]) -> QWidget:
     return box
 
 
+class _EdgeGradient(QWidget):
+    """Transparent overlay that lets the hover gradient cover the frame border."""
+
+    def __init__(self, parent: QWidget, image_view: ImageView) -> None:
+        super().__init__(parent)
+        self._image_view = image_view
+        self._edge = ""
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+    def set_edge(self, edge: str) -> None:
+        if edge != self._edge:
+            self._edge = edge
+            self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        if not self._edge:
+            return
+        painter = QPainter(self)
+        view = self._image_view.geometry()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if self._edge == "left":
+            gradient_width = min(self.width(), view.x() + EDGE_WIDTH + EDGE_GRADIENT_EXTRA)
+            gradient = QLinearGradient(0, 0, gradient_width, 0)
+            gradient.setColorAt(0, QColor(0, 0, 0, 46))
+            gradient.setColorAt(1, QColor(0, 0, 0, 0))
+            painter.fillRect(0, 0, gradient_width, self.height(), gradient)
+            center_x = view.x() + EDGE_WIDTH / 2
+            direction = -1
+        else:
+            gradient_width = min(
+                self.width(),
+                self.width() - (view.x() + view.width() - EDGE_WIDTH - EDGE_GRADIENT_EXTRA),
+            )
+            start_x = self.width() - gradient_width
+            gradient = QLinearGradient(start_x, 0, self.width(), 0)
+            gradient.setColorAt(0, QColor(0, 0, 0, 0))
+            gradient.setColorAt(1, QColor(0, 0, 0, 46))
+            painter.fillRect(start_x, 0, gradient_width, self.height(), gradient)
+            center_x = view.x() + view.width() - EDGE_WIDTH / 2
+            direction = 1
+
+        # Draw the compact left/right control on the same overlay, above the gradient.
+        triangle_width = 12.0
+        triangle_height = triangle_width * 1.45
+        center_y = view.y() + view.height() / 2
+        button_width = triangle_width + 12
+        button_height = triangle_height + 20
+        button_x = center_x - button_width / 2
+        button_y = center_y - button_height / 2
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(0, 0, 0, 100))
+        painter.drawRoundedRect(button_x, button_y + 1, button_width, button_height, 7, 7)
+        painter.setBrush(QColor(35, 35, 35, 205))
+        painter.drawRoundedRect(button_x, button_y, button_width, button_height, 7, 7)
+        points = QPolygonF(
+            [
+                QPointF(center_x + direction * triangle_width / 2, center_y),
+                QPointF(center_x - direction * triangle_width / 2, center_y - triangle_height / 2),
+                QPointF(center_x - direction * triangle_width / 2, center_y + triangle_height / 2),
+            ]
+        )
+        painter.setBrush(QColor(0, 0, 0, 127))  # subtle black shadow under triangle
+        painter.drawPolygon(points.translated(0, 2))
+        painter.setBrush(QColor("white"))
+        painter.drawPolygon(points)
+
+
 class CullWindow(QMainWindow):
     def __init__(self, library: Library) -> None:
         super().__init__()
@@ -112,7 +191,16 @@ class CullWindow(QMainWindow):
         layout = QVBoxLayout(self.image_frame)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.image_view)
+        self.edge_overlay = _EdgeGradient(self.image_frame, self.image_view)
+        self.edge_overlay.setGeometry(self.image_frame.rect())
+        self.edge_overlay.raise_()
         self.image_view.zoomChanged.connect(self._update_status)
+        self.image_view.edge_hover_changed.connect(self.edge_overlay.set_edge)
+        self.image_view.navigate_previous.connect(self.prev_image)
+        self.image_view.navigate_next.connect(self.next_image)
+        self.image_view.keep_requested.connect(lambda: self._set_mark(Mark.APPROVE))
+        self.image_view.reject_requested.connect(lambda: self._set_mark(Mark.DELETE))
+        self.image_view.clear_mark_requested.connect(self.clear_mark)
         self.setCentralWidget(self.image_frame)
 
         keep = lambda: self.mark_and_advance(Mark.APPROVE)
@@ -181,6 +269,10 @@ class CullWindow(QMainWindow):
         if self.library.prev():
             self._load_current()
 
+    def _set_mark(self, mark: Mark) -> None:
+        self.library.set_mark(mark)
+        self._refresh()
+    
     def mark_and_advance(self, mark: Mark) -> None:
         self.library.set_mark(mark)
         if self.library.next():
@@ -220,6 +312,8 @@ class CullWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        self.edge_overlay.setGeometry(self.image_frame.rect())
+        self.edge_overlay.raise_()
         self._update_hints()
 
     def _update_hints(self) -> None:
@@ -293,6 +387,7 @@ class CullWindow(QMainWindow):
         """Update border, title and status. Leaves the image (and its zoom) alone."""
         lib = self.library
         mark = lib.current_mark
+        self.image_view.set_has_mark(mark is not None)
         self.image_frame.setStyleSheet(
             f"QFrame#imageFrame {{ border: {BORDER_WIDTH}px solid {BORDER_COLORS[mark]}; }}"
         )
