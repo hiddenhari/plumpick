@@ -16,10 +16,11 @@ class Theme:
     key_border: str
     accent: str
     accent_pressed: str
+    edge_gradient_alpha: int
 
 
-DARK = Theme("#3a3a3a", "#484848", "#d0d0d0", "#f2f2f2", "#b0b0b0", "#808080", "#2f81f7", "#1f5fbf")
-LIGHT = Theme("#dcdcdc", "#eeeeee", "#333333", "#111111", "#555555", "#999999", "#0969da", "#074a9e")
+DARK = Theme("#3a3a3a", "#484848", "#d0d0d0", "#f2f2f2", "#b0b0b0", "#808080", "#2f81f7", "#1f5fbf", 46)
+LIGHT = Theme("#dcdcdc", "#eeeeee", "#333333", "#111111", "#555555", "#999999", "#0969da", "#074a9e", 18)
 
 
 def current() -> Theme:

@@ -366,3 +366,33 @@ def test_edge_gradient_reaches_outer_frame_edge(
     assert rendered.pixelColor(sample_x, 0).alpha() > 0
 
     frame.close()
+
+
+@pytest.mark.parametrize("edge, sample_x", [("left", 0), ("right", 299)])
+def test_edge_gradient_is_subtler_in_light_theme(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, edge: str, sample_x: int
+) -> None:
+    frame = QWidget()
+    frame.resize(300, 200)
+    view = ImageView(frame)
+    view.setGeometry(6, 6, 288, 188)
+    overlay = _EdgeGradient(frame, view)
+    overlay.setGeometry(frame.rect())
+    overlay.set_edge(edge)
+    frame.show()
+    qapp.processEvents()
+
+    alphas = []
+    for palette in (cull_window.theme.LIGHT, cull_window.theme.DARK):
+        monkeypatch.setattr(cull_window.theme, "current", lambda: palette)
+        rendered = QImage(300, 200, QImage.Format.Format_ARGB32_Premultiplied)
+        rendered.fill(Qt.GlobalColor.transparent)
+        overlay.render(rendered)
+        alphas.append(rendered.pixelColor(sample_x, 0).alpha())
+        # The gradient still fades out without tinting the center of the image.
+        assert rendered.pixelColor(150, 0).alpha() == 0
+
+    assert alphas[0] == pytest.approx(18, abs=1)
+    assert alphas[1] == pytest.approx(46, abs=1)
+    assert 0 < alphas[0] < alphas[1]
+    frame.close()

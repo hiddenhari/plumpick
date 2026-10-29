@@ -151,17 +151,18 @@ class _EdgeGradient(QWidget):
             self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:
+        '''Paint visuals for left/right mouse navigation'''
         if not self._edge:
             return
         painter = QPainter(self)
         view = self._image_view.geometry()
+        # A lighter shadow keeps the hover cue subtle against the light background.
+        gradient_color = QColor(0, 0, 0, theme.current().edge_gradient_alpha)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self._edge == "left":
             gradient_width = min(self.width(), view.x() + EDGE_WIDTH + EDGE_GRADIENT_EXTRA)
-            gradient = QLinearGradient(0, 0, gradient_width, 0)
-            gradient.setColorAt(0, QColor(0, 0, 0, 46))
-            gradient.setColorAt(1, QColor(0, 0, 0, 0))
-            painter.fillRect(0, 0, gradient_width, self.height(), gradient)
+            outer_x = 0
+            inner_x = gradient_width
             center_x = view.x() + EDGE_WIDTH / 2
             direction = -1
         else:
@@ -169,13 +170,16 @@ class _EdgeGradient(QWidget):
                 self.width(),
                 self.width() - (view.x() + view.width() - EDGE_WIDTH - EDGE_GRADIENT_EXTRA),
             )
-            start_x = self.width() - gradient_width
-            gradient = QLinearGradient(start_x, 0, self.width(), 0)
-            gradient.setColorAt(0, QColor(0, 0, 0, 0))
-            gradient.setColorAt(1, QColor(0, 0, 0, 46))
-            painter.fillRect(start_x, 0, gradient_width, self.height(), gradient)
+            outer_x = self.width()
+            inner_x = outer_x - gradient_width
             center_x = view.x() + view.width() - EDGE_WIDTH / 2
             direction = 1
+
+        # Both edges fade inward from the outer frame boundary.
+        gradient = QLinearGradient(outer_x, 0, inner_x, 0)
+        gradient.setColorAt(0, gradient_color)
+        gradient.setColorAt(1, QColor(0, 0, 0, 0))
+        painter.fillRect(min(outer_x, inner_x), 0, gradient_width, self.height(), gradient)
 
         # Draw the compact left/right control on the same overlay, above the gradient.
         triangle_width = 12.0
@@ -383,6 +387,7 @@ class CullWindow(QMainWindow):
             f" border-color: {t.accent_pressed}; }}"
         )
         self.image_view.set_text_color(t.text)
+        self.edge_overlay.update()
 
     # --- actions -----------------------------------------------------------
 
