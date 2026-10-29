@@ -8,7 +8,7 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 
 - Open a folder (pass it on the command line, or pick it in a dialog). Images in it and its subfolders are listed: each folder's images sorted by name, then its subfolders in name order. `_rejected/`, `_kept/`, hidden folders and links are skipped. The status bar shows the path relative to the opened folder.
 - Open an image file instead, and its folder opens at that image. On Windows, right-click an image → **Open with** → **Choose another app** → browse to `plumpick.exe`; after that Plumpick stays in the Open with list.
-- On Windows, click the title-bar icon to open **Select folder…** or **Recent folders**. On other platforms, use the **Files** menu. Another folder opens in a separate window; reopening one already open brings its window forward.
+- On Windows, click the title-bar icon to open **Select folder…** or **Recent folders**. On other platforms, use the **Files** menu. Another folder opens in a separate window; reopening one already open brings its window forward. At most eight culling windows stay open; opening another closes the oldest.
 - View one image at a time, scaled to fit the window, with EXIF rotation applied.
 - Use the mouse to review: click the left or right edge of the image to move between pictures, right-click for marking options, or click on the buttons on bottom status bar.
 - Mark each image as approve or delete. The image gets a green or red border, and the status bar shows the position, filename, and counts of approved, delete and undecided images.

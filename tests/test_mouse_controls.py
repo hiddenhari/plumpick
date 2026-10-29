@@ -258,7 +258,7 @@ def test_recent_folder_menu_opens_selected_folder(
     actions = window.recent_menu.actions()
 
     assert len(actions) == 1
-    assert actions[0].text() == recent.name
+    assert actions[0].text() == f"{tmp_path.name}/{recent.name}"
     assert actions[0].toolTip() == str(recent)
     actions[0].trigger()
 

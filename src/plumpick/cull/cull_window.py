@@ -12,6 +12,7 @@ from PySide6.QtCore import QPoint, QPointF, QTimer, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QCursor,
+    QCloseEvent,
     QKeySequence,
     QLinearGradient,
     QMouseEvent,
@@ -51,6 +52,14 @@ SC_MOUSEMENU = 0xF090
 SC_KEYMENU = 0xF100
 HTSYSMENU = 3
 HTCAPTION = 2
+
+
+def _recent_folder_label(path: Path | str) -> str:
+    """Show the parent folder so same-named recent folders are distinguishable."""
+    folder = Path(path)
+    name = folder.name or str(folder)
+    parent = folder.parent.name or str(folder.parent)
+    return f"{parent}/{name}"
 
 
 # (keys, action): each key is drawn as a small keycap box.
@@ -263,6 +272,19 @@ class CullWindow(QMainWindow):
         self._build_files_menu()
         self._load_current()
 
+    def closeEvent(self, event: QCloseEvent) -> None:
+        try:
+            self.library.save_session()
+        except OSError as error:
+            QMessageBox.warning(
+                self,
+                "Save session",
+                f"Could not save this folder's review progress:\n{error}",
+            )
+            event.ignore()
+            return
+        super().closeEvent(event)
+
     def _build_files_menu(self) -> None:
         self.files_menu = QMenu(self)
         self.files_menu.setObjectName("filesMenu")
@@ -307,7 +329,8 @@ class CullWindow(QMainWindow):
         QTimer.singleShot(0, lambda: self.files_menu.popup(position))
 
     def _titlebar_icon_position(self) -> QPoint:
-        """Approximate the title-bar icon anchor for the Alt+Space invocation."""
+        """Approximate the top-left title-bar icon anchor for the Alt+Space invocation."""
+        # TODO: use DPI-aware native title-bar icon bounds instead of this estimate.
         return self.frameGeometry().topLeft() + QPoint(8, 28)
 
     def _select_folder(self) -> None:
@@ -325,7 +348,7 @@ class CullWindow(QMainWindow):
             empty.setEnabled(False)
             return
         for folder in folders:
-            action = self.recent_menu.addAction(Path(folder).name or folder)
+            action = self.recent_menu.addAction(_recent_folder_label(folder))
             action.setToolTip(folder)
             action.triggered.connect(
                 lambda _checked=False, selected=folder: self._open_recent(selected)

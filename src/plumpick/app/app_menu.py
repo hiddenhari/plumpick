@@ -1,4 +1,4 @@
-"""Persistent, de-duplicated list of recently opened image folders."""
+"""Top-left menu settings"""
 
 from __future__ import annotations
 
