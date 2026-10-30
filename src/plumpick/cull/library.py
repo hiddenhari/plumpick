@@ -158,7 +158,7 @@ class Library:
         temp_path = self.session_file.with_suffix(".tmp")
         try:
             temp_path.write_text(json.dumps(data, indent=4), encoding="utf-8")
-            os.replace(temp_path, self.session_file)
+            os.replace(temp_path, self.session_file)  # TODO what to do when cannot save
         finally:
             temp_path.unlink(missing_ok=True)
 

@@ -286,6 +286,7 @@ class CullWindow(QMainWindow):
                 f"Could not save this folder's review progress:\n{error}",
             )
             event.ignore()
+            super().closeEvent(event)  # TODO: what to do when cannot save?
             return
         super().closeEvent(event)
 
