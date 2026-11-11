@@ -19,11 +19,11 @@ Fast keep/delete culling for large batches of generated images. Open a folder, p
 
 | Key | Action |
 |---|---|
-| `→` / `Space` | next image |
-| `←` | previous image |
-| `K` / `↑` | approve, then next |
-| `X` / `↓` / `Delete` | mark for delete, then next |
-| `U` | clear the mark |
+| `→` / `Space` / `D` | next image |
+| `←` / `A` | previous image |
+| `K` / `↑` / `W` | approve (stay on current image) |
+| `X` / `↓` / `S` / `Delete` | mark for delete (stay on current image) |
+| `R` / `End` / `/` | clear the mark |
 | `Ctrl+Z` / `Ctrl+Y` | undo / redo |
 | `Ctrl+Enter` | commit |
 

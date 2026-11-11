@@ -55,7 +55,7 @@ erase those decisions on the next save.
 
 ### Shortcuts
 
-- List next image, previous image, approve and advance, delete and advance,
+- List next image, previous image, approve, mark for delete,
   clear mark, toggle zoom, undo, redo, and commit.
 - Support adding, replacing, and removing bindings, including multiple bindings
   per action and leaving an action unbound.

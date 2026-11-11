@@ -11,6 +11,7 @@ from ctypes import wintypes
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QImage, QMouseEvent, QPixmap
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from plumpick.cull import cull_window
@@ -190,7 +191,6 @@ def test_mark_menu_click_sets_mark_without_advancing(
 
     monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
     window = CullWindow(Library(tmp_path, paths))
-    advance_calls: list[Mark] = []
     set_mark_calls: list[Mark] = []
     original_set_mark = window._set_mark
 
@@ -199,7 +199,6 @@ def test_mark_menu_click_sets_mark_without_advancing(
         original_set_mark(mark)
 
     monkeypatch.setattr(window, "_set_mark", record_set_mark)
-    monkeypatch.setattr(window, "mark_and_advance", advance_calls.append)
 
     for action_index, expected_mark in ((0, Mark.APPROVE), (1, Mark.DELETE)):
         monkeypatch.setattr(
@@ -215,7 +214,70 @@ def test_mark_menu_click_sets_mark_without_advancing(
         assert window.library.current_mark is expected_mark
 
     assert set_mark_calls == [Mark.APPROVE, Mark.DELETE]
-    assert advance_calls == []
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("key", "mark"),
+    [
+        (Qt.Key.Key_K, Mark.APPROVE),
+        (Qt.Key.Key_Up, Mark.APPROVE),
+        (Qt.Key.Key_W, Mark.APPROVE),
+        (Qt.Key.Key_X, Mark.DELETE),
+        (Qt.Key.Key_Down, Mark.DELETE),
+        (Qt.Key.Key_S, Mark.DELETE),
+        (Qt.Key.Key_Delete, Mark.DELETE),
+    ],
+)
+@pytest.mark.parametrize("start_index", [0, 1])
+def test_mark_shortcuts_stay_on_image_until_navigation(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    key: Qt.Key, mark: Mark, start_index: int,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    window = CullWindow(Library(tmp_path, [tmp_path / "one.png", tmp_path / "two.png"]))
+    if start_index:
+        window.next_image()
+    window.show()
+    window.activateWindow()
+    qapp.processEvents()
+
+    QTest.keyClick(window, key)
+    assert window.library.index == start_index
+    assert window.library.current_mark is mark
+
+    QTest.keyClick(window, Qt.Key.Key_Left if start_index else Qt.Key.Key_Right)
+    assert window.library.index == 1 - start_index
+    assert window.library.current_mark is None
+    QTest.keyClick(window, Qt.Key.Key_Right if start_index else Qt.Key.Key_Left)
+    assert window.library.index == start_index
+    assert window.library.current_mark is mark
+    window.close()
+
+
+@pytest.mark.parametrize(
+    ("text", "mark"),
+    [("K", Mark.APPROVE), ("↑", Mark.APPROVE), ("keep", Mark.APPROVE),
+     ("X", Mark.DELETE), ("↓", Mark.DELETE), ("Del", Mark.DELETE),
+     ("reject", Mark.DELETE)],
+)
+@pytest.mark.parametrize("start_index", [0, 1])
+def test_mark_hints_stay_on_current_image(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    text: str, mark: Mark, start_index: int,
+) -> None:
+    monkeypatch.setattr(cull_window.theme, "on_change", lambda _callback: None)
+    window = CullWindow(Library(tmp_path, [tmp_path / "one.png", tmp_path / "two.png"]))
+    if start_index:
+        window.next_image()
+    window.show()
+    qapp.processEvents()
+    label = next(label for label in window.hints.findChildren(cull_window._ClickLabel)
+                 if label.text() == text)
+
+    QTest.mouseClick(label, Qt.MouseButton.LeftButton)
+    assert window.library.index == start_index
+    assert window.library.current_mark is mark
     window.close()
 
 

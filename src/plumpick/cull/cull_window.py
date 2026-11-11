@@ -237,8 +237,8 @@ class CullWindow(QMainWindow):
         self.image_view.clear_mark_requested.connect(self.clear_mark)
         self.setCentralWidget(self.image_frame)
 
-        keep = lambda: self.mark_and_advance(Mark.APPROVE)
-        reject = lambda: self.mark_and_advance(Mark.DELETE)
+        keep = lambda: self._set_mark(Mark.APPROVE)
+        reject = lambda: self._set_mark(Mark.DELETE)
         self.hints = _build_hints(
             {
                 "←": self.prev_image,
@@ -403,14 +403,6 @@ class CullWindow(QMainWindow):
     def _set_mark(self, mark: Mark) -> None:
         self.library.set_mark(mark)
         self._refresh()
-    
-    def mark_and_advance(self, mark: Mark) -> None:
-        self.library.set_mark(mark)
-        if self.library.next():
-            self._load_current()
-        else:
-            self._refresh()  # last image: stay, but show the new mark
-
     def clear_mark(self) -> None:
         self.library.set_mark(None)
         self._refresh()
@@ -485,8 +477,8 @@ class CullWindow(QMainWindow):
         bindings = [
             (("Right", "Space", "D"), self.next_image),
             (("Left", "A"), self.prev_image),
-            (("K", "Up", "W"), lambda: self.mark_and_advance(Mark.APPROVE)),
-            (("X", "Down", "S", "Delete"), lambda: self.mark_and_advance(Mark.DELETE)),
+            (("K", "Up", "W"), lambda: self._set_mark(Mark.APPROVE)),
+            (("X", "Down", "S", "Delete"), lambda: self._set_mark(Mark.DELETE)),
             (("R", "End", "/"), self.clear_mark),
             (("Z",), self.image_view.toggle_zoom),
             ((QKeySequence.StandardKey.Undo,), self.undo),
